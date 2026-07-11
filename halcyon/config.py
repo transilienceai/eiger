@@ -1,0 +1,36 @@
+from collections.abc import Mapping
+from dataclasses import dataclass
+
+_TRUE = {"1", "true", "on", "yes"}
+
+
+def _flag(env: Mapping[str, str], name: str, default: bool) -> bool:
+    raw = env.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in _TRUE
+
+
+@dataclass(frozen=True)
+class Settings:
+    mode: str
+    sec_system_prompt_hardening: bool
+    sec_input_filter: bool
+    ollama_url: str
+    ollama_model: str
+    database_url: str
+    default_provider: str
+
+
+def load_settings(env: Mapping[str, str]) -> Settings:
+    mode = env.get("HALCYON_MODE", "vulnerable").strip().lower()
+    secure = mode == "secure"
+    return Settings(
+        mode=mode,
+        sec_system_prompt_hardening=_flag(env, "SEC_SYSTEM_PROMPT_HARDENING", secure),
+        sec_input_filter=_flag(env, "SEC_INPUT_FILTER", secure),
+        ollama_url=env.get("OLLAMA_URL", "http://localhost:11434"),
+        ollama_model=env.get("OLLAMA_MODEL", "llama3.1:8b"),
+        database_url=env.get("DATABASE_URL", ""),
+        default_provider=env.get("DEFAULT_PROVIDER", "local"),
+    )
