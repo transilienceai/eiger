@@ -67,3 +67,18 @@ def test_progress_survives_new_app_same_store():
     c2 = TestClient(app2)
     r = c2.get("/validate/m1", params={"session": "p1"})
     assert r.json()["core"] == "pass"
+
+
+def test_profile_set_and_beacon_records_xss():
+    client, store = make_client({"HALCYON_MODE": "vulnerable"}, "hi")
+    client.post("/api/profile", json={"session_id": "p1", "display_name": "<x>"})
+    r = client.get("/beacon/xss", params={"session": "p1"})
+    assert r.status_code == 200
+    assert client.get("/validate/m2", params={"session": "p1"}).json()["core"] == "pass"
+
+
+def test_csp_header_only_in_secure():
+    vuln, _ = make_client({"HALCYON_MODE": "vulnerable"}, "hi")
+    assert "content-security-policy" not in {k.lower() for k in vuln.get("/chat").headers}
+    sec, _ = make_client({"HALCYON_MODE": "secure"}, "hi")
+    assert "content-security-policy" in {k.lower() for k in sec.get("/chat").headers}

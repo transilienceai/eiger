@@ -28,11 +28,27 @@ class ResetIn(BaseModel):
     session_id: str
 
 
+class ProfileIn(BaseModel):
+    session_id: str
+    display_name: str
+
+
 _VALIDATORS = {"m1": m1.validate, "m2": m2.validate}
 
 
 def create_app(store: Store, settings: Settings, llm_factory: LLMFactory) -> FastAPI:
     app = FastAPI(title="Halcyon")
+
+    from starlette.requests import Request
+
+    @app.middleware("http")
+    async def _csp(request: Request, call_next):
+        resp = await call_next(request)
+        if settings.sec_output_encoding:
+            resp.headers["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self'; img-src 'self' data:"
+            )
+        return resp
 
     templates = Environment(
         loader=FileSystemLoader(Path(__file__).parent / "templates"),
@@ -88,5 +104,23 @@ def create_app(store: Store, settings: Settings, llm_factory: LLMFactory) -> Fas
     @app.get("/chat", response_class=HTMLResponse)
     def chat_page() -> str:
         return templates.get_template("chat.html").render()
+
+    from fastapi.responses import Response
+
+    from halcyon import audit
+
+    _GIF = bytes.fromhex(
+        "47494638396101000100800000ffffff00000021f90401000000002c00000000010001000002024401003b"
+    )
+
+    @app.post("/api/profile")
+    def set_profile(body: ProfileIn) -> dict:
+        store.set_profile(body.session_id, body.display_name)
+        return {"status": "ok"}
+
+    @app.get("/beacon/xss")
+    def beacon(session: str) -> Response:
+        audit.record(store, session, "m2", audit.XSS_BEACON, session)
+        return Response(content=_GIF, media_type="image/gif")
 
     return app
