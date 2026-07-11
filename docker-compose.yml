@@ -1,0 +1,35 @@
+services:
+  web:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      HALCYON_MODE: ${HALCYON_MODE:-vulnerable}
+      DATABASE_URL: postgresql://halcyon:halcyon@db:5432/halcyon
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1:8b}
+      DEFAULT_PROVIDER: local
+    depends_on:
+      db:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: halcyon
+      POSTGRES_PASSWORD: halcyon
+      POSTGRES_DB: halcyon
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    ports: ["5432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U halcyon -d halcyon"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  ollama:
+    image: ollama/ollama:latest
+    volumes: ["ollama:/root/.ollama"]
+    ports: ["11434:11434"]
+volumes:
+  pgdata:
+  ollama:
