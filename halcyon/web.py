@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel
 
-from halcyon import halo
+from halcyon import guards, halo
 from halcyon.config import Settings
 from halcyon.llm import LLM, OllamaProvider
 from halcyon.store import Store
@@ -102,8 +102,12 @@ def create_app(store: Store, settings: Settings, llm_factory: LLMFactory) -> Fas
         )
 
     @app.get("/chat", response_class=HTMLResponse)
-    def chat_page() -> str:
-        return templates.get_template("chat.html").render()
+    def chat_page(session: str = "dev") -> str:
+        name = store.get_profile(session)
+        return templates.get_template("chat.html").render(
+            output_encoding="on" if settings.sec_output_encoding else "off",
+            display_name_html=guards.encode_output(name, settings),
+        )
 
     from fastapi.responses import Response
 

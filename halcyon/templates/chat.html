@@ -14,6 +14,8 @@
   #f button[disabled] { opacity: .5; cursor: default; }
 </style>
 <h1>Halo</h1>
+<div id="cfg" data-encoding="{{ output_encoding }}"></div>
+<div id="greeting">Welcome, <span id="dn">{{ display_name_html | safe }}</span></div>
 <div class="controls">
   <label>Model:
     <select id="provider">
@@ -25,6 +27,10 @@
     <select id="rprovider"><option>openai</option><option>anthropic</option></select>
     <input id="model" placeholder="model (e.g. gpt-4o)" />
     <input id="key" type="password" placeholder="API key (not stored server-side)" />
+  </span>
+  <span id="profile">
+    <input id="dname" placeholder="Display name" />
+    <button id="setname" type="button">Set name</button>
   </span>
 </div>
 <div id="log"></div>
@@ -41,6 +47,15 @@
   provSel.onchange = () => {
     document.getElementById("remote").style.display =
       provSel.value === "remote" ? "inline" : "none";
+  };
+  document.getElementById("setname").onclick = () => {
+    fetch("/api/profile", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: sid,
+        display_name: document.getElementById("dname").value,
+      }),
+    }).then(() => location.reload());
   };
   function line(cls, who, text) {
     const p = document.createElement("p");

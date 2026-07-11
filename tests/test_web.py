@@ -82,3 +82,21 @@ def test_csp_header_only_in_secure():
     assert "content-security-policy" not in {k.lower() for k in vuln.get("/chat").headers}
     sec, _ = make_client({"HALCYON_MODE": "secure"}, "hi")
     assert "content-security-policy" in {k.lower() for k in sec.get("/chat").headers}
+
+
+def test_chat_page_exposes_encoding_flag():
+    vuln, _ = make_client({"HALCYON_MODE": "vulnerable"}, "hi")
+    assert 'data-encoding="off"' in vuln.get("/chat").text
+    sec, _ = make_client({"HALCYON_MODE": "secure"}, "hi")
+    assert 'data-encoding="on"' in sec.get("/chat").text
+
+
+def test_display_name_rendered_raw_when_vulnerable_escaped_when_secure():
+    payload = "<img src=x onerror=1>"
+    vuln, _ = make_client({"HALCYON_MODE": "vulnerable"}, "hi")
+    vuln.post("/api/profile", json={"session_id": "p1", "display_name": payload})
+    assert payload in vuln.get("/chat", params={"session": "p1"}).text  # raw
+    sec, _ = make_client({"HALCYON_MODE": "secure"}, "hi")
+    sec.post("/api/profile", json={"session_id": "p1", "display_name": payload})
+    body = sec.get("/chat", params={"session": "p1"}).text
+    assert payload not in body and "&lt;img" in body  # escaped
