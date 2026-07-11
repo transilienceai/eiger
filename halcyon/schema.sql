@@ -17,3 +17,8 @@ CREATE TABLE IF NOT EXISTS progress (
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (session_id, module)
 );
+
+CREATE TABLE IF NOT EXISTS profile (
+  session_id   text PRIMARY KEY,
+  display_name text NOT NULL DEFAULT ''
+);

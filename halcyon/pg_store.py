@@ -69,6 +69,22 @@ class PostgresStore:
             )
             conn.commit()
 
+    def set_profile(self, session_id: str, display_name: str) -> None:
+        with psycopg.connect(self._dsn) as conn:
+            conn.execute(
+                "INSERT INTO profile (session_id, display_name) VALUES (%s, %s) "
+                "ON CONFLICT (session_id) DO UPDATE SET display_name=EXCLUDED.display_name",
+                (session_id, display_name),
+            )
+            conn.commit()
+
+    def get_profile(self, session_id: str) -> str:
+        with psycopg.connect(self._dsn) as conn:
+            row = conn.execute(
+                "SELECT display_name FROM profile WHERE session_id=%s", (session_id,)
+            ).fetchone()
+        return row[0] if row else ""
+
     def ping(self) -> bool:
         try:
             with psycopg.connect(self._dsn, connect_timeout=3) as conn:

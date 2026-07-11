@@ -24,6 +24,8 @@ class Store(Protocol):
     def upsert_progress(
         self, session_id: str, module: str, core: bool, stretch: bool
     ) -> None: ...
+    def set_profile(self, session_id: str, display_name: str) -> None: ...
+    def get_profile(self, session_id: str) -> str: ...
     def ping(self) -> bool: ...
 
 
@@ -31,6 +33,7 @@ class Store(Protocol):
 class InMemoryStore:
     _events: list[Event] = field(default_factory=list)
     _progress: dict[tuple[str, str], tuple[bool, bool]] = field(default_factory=dict)
+    _profiles: dict[str, str] = field(default_factory=dict)
     _seq: int = 0
 
     def append_event(
@@ -58,6 +61,12 @@ class InMemoryStore:
         self, session_id: str, module: str, core: bool, stretch: bool
     ) -> None:
         self._progress[(session_id, module)] = (core, stretch)
+
+    def set_profile(self, session_id: str, display_name: str) -> None:
+        self._profiles[session_id] = display_name
+
+    def get_profile(self, session_id: str) -> str:
+        return self._profiles.get(session_id, "")
 
     def ping(self) -> bool:
         return True
