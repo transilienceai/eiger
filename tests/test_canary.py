@@ -1,0 +1,24 @@
+from halcyon import audit, canary, guards
+from halcyon.store import InMemoryStore
+
+
+def test_honeytoken_in_reply_records_disclosure():
+    s = InMemoryStore()
+    fired = canary.scan_and_record(
+        s, "p1", "m1", f"the token is {guards.HONEYTOKEN}", "p1"
+    )
+    assert audit.INTERNAL_TOKEN_DISCLOSED in fired
+    assert audit.has_event(s, "p1", "m1", audit.INTERNAL_TOKEN_DISCLOSED)
+
+
+def test_override_marker_records_policy_override():
+    s = InMemoryStore()
+    fired = canary.scan_and_record(s, "p1", "m1", f"ok {guards.OVERRIDE_MARKER}", "p1")
+    assert audit.POLICY_OVERRIDE in fired
+
+
+def test_clean_reply_records_nothing():
+    s = InMemoryStore()
+    fired = canary.scan_and_record(s, "p1", "m1", "your balance is $100", "p1")
+    assert fired == []
+    assert s.events_since_reset("p1", "m1") == []
