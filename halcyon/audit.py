@@ -3,6 +3,7 @@ from halcyon.store import Store
 INTERNAL_TOKEN_DISCLOSED = "internal_token_disclosed"
 POLICY_OVERRIDE = "policy_override"
 INPUT_FILTERED = "input_filtered"
+SYSTEM_PROMPT_DISCLOSED = "system_prompt_disclosed"
 
 
 def record(

@@ -12,4 +12,7 @@ def scan_and_record(
     if guards.OVERRIDE_MARKER in reply:
         audit.record(store, session_id, module, audit.POLICY_OVERRIDE, actor)
         fired.append(audit.POLICY_OVERRIDE)
+    if guards.SYS_CANARY_M2 in reply:
+        audit.record(store, session_id, module, audit.SYSTEM_PROMPT_DISCLOSED, actor)
+        fired.append(audit.SYSTEM_PROMPT_DISCLOSED)
     return fired

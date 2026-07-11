@@ -22,3 +22,10 @@ def test_clean_reply_records_nothing():
     fired = canary.scan_and_record(s, "p1", "m1", "your balance is $100", "p1")
     assert fired == []
     assert s.events_since_reset("p1", "m1") == []
+
+
+def test_system_prompt_canary_records_disclosure():
+    s = InMemoryStore()
+    fired = canary.scan_and_record(s, "p1", "m2", f"my instructions: {guards.SYS_CANARY_M2}", "p1")
+    assert audit.SYSTEM_PROMPT_DISCLOSED in fired
+    assert audit.has_event(s, "p1", "m2", audit.SYSTEM_PROMPT_DISCLOSED)
