@@ -12,7 +12,7 @@ from halcyon import guards, halo
 from halcyon.config import Settings
 from halcyon.llm import LLM, OllamaProvider
 from halcyon.store import Store
-from halcyon.validators import m1, m2
+from halcyon.validators import m1, m2, m3
 
 LLMFactory = Callable[[str | None, str | None, str | None], LLM]
 
@@ -34,7 +34,7 @@ class ProfileIn(BaseModel):
     display_name: str
 
 
-_VALIDATORS = {"m1": m1.validate, "m2": m2.validate}
+_VALIDATORS = {"m1": m1.validate, "m2": m2.validate, "m3": m3.validate}
 
 
 def create_app(store: Store, settings: Settings, llm_factory: LLMFactory) -> FastAPI:
