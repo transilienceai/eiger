@@ -22,3 +22,34 @@ def test_clear_and_seed():
     assert kb.retrieve("x", "s1") == []
     kb.seed([{"text": "alpha beta", "provenance": "trusted"}])
     assert kb.retrieve("alpha", "s1")[0].text == "alpha beta"
+
+
+def test_tie_break_is_stable_by_insertion_order():
+    kb = InMemoryKB()
+    kb.add("alpha shared", "trusted")   # both share exactly one query token ("shared")
+    kb.add("beta shared", "trusted")
+    hits = kb.retrieve("shared", "s1", k=2)
+    assert [h.text for h in hits] == ["alpha shared", "beta shared"]  # insertion order on tie
+
+
+def test_topk_truncates_to_k_highest():
+    kb = InMemoryKB()
+    kb.add("card pin reset", "trusted")     # score 3 for query below
+    kb.add("card pin", "trusted")           # score 2
+    kb.add("card", "trusted")               # score 1
+    hits = kb.retrieve("card pin reset", "s1", k=2)
+    assert [h.text for h in hits] == ["card pin reset", "card pin"]  # top-2 by score
+
+
+def test_add_defaults_public_and_unowned():
+    kb = InMemoryKB()
+    c = kb.add("plain doc", "trusted")
+    assert c.access == "public" and c.owner_session == ""
+
+
+def test_tie_break_correct_past_nine_chunks():
+    kb = InMemoryKB()
+    for i in range(11):
+        kb.add(f"doc{i} shared", "trusted")
+    hits = kb.retrieve("shared", "s1", k=11)
+    assert hits[0].text == "doc0 shared" and hits[1].text == "doc1 shared"

@@ -32,7 +32,7 @@ class InMemoryKB:
     def add(self, text: str, provenance: str, access: str = "public",
             owner_session: str = "") -> Chunk:
         self._seq += 1
-        c = Chunk(f"c{self._seq}", text, provenance, access, owner_session)
+        c = Chunk(f"c{self._seq:04d}", text, provenance, access, owner_session)
         self._chunks.append(c)
         return c
 
