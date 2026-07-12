@@ -1,8 +1,8 @@
 import os
 
 from halcyon import kb_fixtures
+from halcyon.chroma_kb import ChromaKB
 from halcyon.config import load_settings
-from halcyon.kb import InMemoryKB
 from halcyon.llm import build_llm
 from halcyon.pg_store import PostgresStore, init_schema
 from halcyon.web import create_app
@@ -10,7 +10,7 @@ from halcyon.web import create_app
 _settings = load_settings(os.environ)
 init_schema(_settings.database_url)
 _store = PostgresStore(_settings.database_url)
-_kb = InMemoryKB()
+_kb = ChromaKB()
 _kb.seed(kb_fixtures.SEED)
 
 
