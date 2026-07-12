@@ -134,13 +134,33 @@ class OllamaToolProvider:
         self._url = url.rstrip("/")
         self._model = model
 
+    @staticmethod
+    def _translate(messages: list[dict]) -> list[dict]:
+        translated = []
+        for m in messages:
+            role = m.get("role")
+            if role == "assistant" and "tool_calls" in m:
+                translated.append({
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {"function": {"name": c["name"], "arguments": c["args"]}}
+                        for c in m["tool_calls"]
+                    ],
+                })
+            elif role == "tool":
+                translated.append({"role": "tool", "content": m.get("content", "")})
+            else:
+                translated.append(m)
+        return translated
+
     def next_step(self, messages: list[dict], tools: list[dict]) -> "ToolCall | FinalAnswer":
         try:
             resp = httpx.post(
                 f"{self._url}/api/chat",
                 json={
                     "model": self._model,
-                    "messages": messages,
+                    "messages": self._translate(messages),
                     "tools": [{"type": "function", "function": schema} for schema in tools],
                     "stream": False,
                 },
@@ -167,6 +187,28 @@ class OpenAIToolProvider:
         self._api_key = api_key
         self._model = model
 
+    @staticmethod
+    def _translate(messages: list[dict]) -> list[dict]:
+        translated = []
+        for m in messages:
+            role = m.get("role")
+            if role == "assistant" and "tool_calls" in m:
+                translated.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {"id": c["id"], "type": "function",
+                         "function": {"name": c["name"], "arguments": json.dumps(c["args"])}}
+                        for c in m["tool_calls"]
+                    ],
+                })
+            elif role == "tool":
+                translated.append({"role": "tool", "tool_call_id": m.get("tool_call_id"),
+                                    "content": m.get("content", "")})
+            else:
+                translated.append(m)
+        return translated
+
     def next_step(self, messages: list[dict], tools: list[dict]) -> "ToolCall | FinalAnswer":
         try:
             resp = httpx.post(
@@ -174,7 +216,7 @@ class OpenAIToolProvider:
                 headers={"Authorization": f"Bearer {self._api_key}"},
                 json={
                     "model": self._model,
-                    "messages": messages,
+                    "messages": self._translate(messages),
                     "tools": [{"type": "function", "function": schema} for schema in tools],
                 },
                 timeout=60,
@@ -201,13 +243,36 @@ class AnthropicToolProvider:
         self._api_key = api_key
         self._model = model
 
-    def next_step(self, messages: list[dict], tools: list[dict]) -> "ToolCall | FinalAnswer":
+    @staticmethod
+    def _translate(messages: list[dict]) -> tuple[str, list[dict]]:
         system = " ".join(str(m["content"]) for m in messages if m.get("role") == "system")
-        turns = [
-            {"role": "assistant" if m.get("role") == "assistant" else "user",
-             "content": str(m.get("content", ""))}
-            for m in messages if m.get("role") != "system"
-        ]
+        turns = []
+        for m in messages:
+            role = m.get("role")
+            if role == "system":
+                continue
+            if role == "assistant" and "tool_calls" in m:
+                turns.append({
+                    "role": "assistant",
+                    "content": [
+                        {"type": "tool_use", "id": c["id"], "name": c["name"], "input": c["args"]}
+                        for c in m["tool_calls"]
+                    ],
+                })
+            elif role == "tool":
+                turns.append({
+                    "role": "user",
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": m.get("tool_call_id"),
+                         "content": m.get("content", "")}
+                    ],
+                })
+            else:
+                turns.append({"role": "user", "content": m.get("content", "")})
+        return system, turns
+
+    def next_step(self, messages: list[dict], tools: list[dict]) -> "ToolCall | FinalAnswer":
+        system, turns = self._translate(messages)
         try:
             resp = httpx.post(
                 "https://api.anthropic.com/v1/messages",
@@ -223,7 +288,7 @@ class AnthropicToolProvider:
                     "messages": turns,
                     "tools": [
                         {
-                            "name": schema["name"],
+                            "name": schema.get("name", ""),
                             "description": schema.get("description", ""),
                             "input_schema": schema.get("parameters", {}),
                         }
@@ -253,7 +318,7 @@ def build_tool_llm(
     api_key: str | None = None,
 ) -> ToolLLM:
     provider = provider or settings.default_provider
-    if provider == "openai":
+    if provider in ("remote", "openai"):
         return OpenAIToolProvider(api_key or "", model or "gpt-4o")
     if provider == "anthropic":
         return AnthropicToolProvider(api_key or "", model or "claude-3-5-sonnet-latest")
