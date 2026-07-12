@@ -32,10 +32,10 @@ No model behavior to observe, so the graded mechanism is a **server-side check o
 | `halcyon/scan_artifact.py` (new) | provided **static** pickle-opcode scanner (`python -m halcyon.scan_artifact <file>`): uses `pickletools.genops`, flags dangerous opcodes (`GLOBAL`/`STACK_GLOBAL` to `os`/`subprocess`/`builtins`, `REDUCE`). Reports findings + the file's sha256. Never unpickles. |
 | `labs/m4/` (new) | the audit target fixtures: `artifacts/` (benign `.safetensors`-style + one **poisoned** `.pkl`), a `build_poisoned.py` that generates the poisoned pickle deterministically (pickling is safe; only unpickling executes), and `requirements-vulnerable.txt` with a **planted known-CVE pinned dependency**. Isolated from the app's real `pyproject.toml`/`uv.lock` so our own build is never compromised. |
 | `halcyon/m4_answers.py` (new) | server-side known-bad answers (poisoned artifact sha256, vulnerable package name) + normalizers. Not exposed via any read endpoint. |
-| `audit.py` | `MALICIOUS_ARTIFACT_IDENTIFIED`, `VULNERABLE_DEPENDENCY_IDENTIFIED`, `EVASIVE_ARTIFACT_CRAFTED` |
+| `audit.py` | `MALICIOUS_ARTIFACT_IDENTIFIED`, `VULNERABLE_DEPENDENCY_IDENTIFIED` |
 | `web.py` | `POST /submit/m4` (check submission → record event), register `m4` validator, reset clears m4 events |
-| `validators/m4.py` | core = `malicious_artifact_identified` ∧ `vulnerable_dependency_identified`; stretch = `evasive_artifact_crafted` |
-| UI | an M4 panel: brief instructions ("audit `labs/m4/`, run the scanner"), two submit boxes (artifact hash, package name), and the stretch upload |
+| `validators/m4.py` | core = `malicious_artifact_identified`; stretch = `vulnerable_dependency_identified` |
+| UI | an M4 panel: brief instructions ("audit `labs/m4/`, run the scanner"), two submit boxes (artifact hash, package name) |
 | tests | deterministic: correct/incorrect submissions; scanner flags the poisoned pickle and clears the benign ones; the secure loader rejects the pickle; validator |
 
 New module id: `"m4"`.
@@ -48,8 +48,11 @@ New module id: `"m4"`.
 
 ## 5. Core + stretch
 
-- **Core (mandatory):** identify **both** planted findings — submit the poisoned artifact's sha256 **and** the vulnerable dependency's name; each correct submission records its event; core = both present.
-- **Stretch:** **craft an evasive artifact** — upload a pickle that the *provided naive* scanner rates clean but a *stricter* server-side check flags as malicious (e.g. dangerous opcode reached via an alias/obfuscation the naive check misses). Validated by **static analysis only** (the server runs opcode analysis, **never `pickle.load`s the upload**) → `evasive_artifact_crafted`. `[If the evasive-upload surface is more than we want in S4, ship core-only and defer stretch — flagged in §7.]`
+Both planted findings are the exercise; core/stretch is the floor/ceiling split:
+- **Core (mandatory):** identify the **poisoned model artifact** — run the scanner, submit its sha256 → `malicious_artifact_identified`. The AI-specific headline finding.
+- **Stretch (fast finishers):** identify the **vulnerable pinned dependency** — SCA the lab manifest, submit its package name → `vulnerable_dependency_identified`.
+- Both are deterministic (submission checked against a server-side known-bad answer). No upload surface.
+- **Deferred (future enhancement):** "craft an evasive artifact" that beats the naive scanner — noted, not built in S4 (a clean naive-vs-strict static distinction is fiddly and the two findings already give a complete core+stretch).
 
 ## 6. What participants actually do (flow)
 
@@ -62,7 +65,7 @@ New module id: `"m4"`.
 ## 7. Decisions / forks
 1. **Static scanner + submit-the-finding validation** (no per-participant RCE). Matches spec §5 and the not-yet-built fleet. *Proceeding.*
 2. **Deliberately-vulnerable material isolated in `labs/m4/`** (not in the app's real deps), so our own build/CI stays clean while participants still get a realistic "audit this repo" target. *Proceeding.*
-3. **Stretch = evasive-artifact upload**, validated by static analysis only. If the upload surface is undesired for S4, ship **core-only** and defer. *Recommend include; will keep the upload static-only and never deserialize.*
+3. **Core = poisoned artifact, stretch = vulnerable dependency** (both findings, floor/ceiling split). Evasive-artifact crafting deferred (see §5). *Proceeding.*
 4. **Vulnerable dependency choice:** a real, well-known CVE'd pinned version (e.g. an old `pyyaml`/`jinja2`/`requests`) in the lab manifest, so `pip-audit`/`safety` flags it authentically. Exact package pinned at build time.
 
 ## 8. Out of scope for S4
