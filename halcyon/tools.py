@@ -38,8 +38,13 @@ def execute(name: str, session_id: str, args: dict, bank: Bank,
         a = bank.get(str(args.get("account", "")))
         return f"account {a.id}: email={a.email} balance={a.balance}" if a else "no such account"
     if name in ("transfer_funds", "issue_refund"):
-        to = str(args["to_account"])
-        amount = int(args["amount"])
+        to = str(args.get("to_account", ""))
+        try:
+            amount = int(args.get("amount", 0) or 0)
+        except (TypeError, ValueError):
+            return f"{name}: invalid amount"
+        if not to:
+            return f"{name}: missing to_account"
         if not bank.owns(session_id, to):
             audit.record(store, session_id, "m5", audit.UNAUTHORIZED_TOOL_CALL,
                          session_id, {"tool": name, "to_account": to, "amount": amount})
@@ -47,8 +52,10 @@ def execute(name: str, session_id: str, args: dict, bank: Bank,
             bank.credit(to, amount)
         return f"{name}: moved {amount} to {to}"
     if name == "update_email":
-        acct = str(args["account"])
-        email = str(args["email"])
+        acct = str(args.get("account", ""))
+        email = str(args.get("email", ""))
+        if not acct:
+            return "update_email: missing account"
         if not bank.owns(session_id, acct):
             audit.record(store, session_id, "m5", audit.UNAUTHORIZED_ACCOUNT_MODIFICATION,
                          session_id, {"account": acct, "email": email})
