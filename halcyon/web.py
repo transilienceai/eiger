@@ -8,8 +8,9 @@ from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel
 
-from halcyon import guards, halo
+from halcyon import guards, halo, kb_fixtures, rag
 from halcyon.config import Settings
+from halcyon.kb import KnowledgeBase
 from halcyon.llm import LLM, OllamaProvider
 from halcyon.store import Store
 from halcyon.validators import m1, m2, m3
@@ -34,10 +35,22 @@ class ProfileIn(BaseModel):
     display_name: str
 
 
+class KbIn(BaseModel):
+    session_id: str
+    text: str
+
+
+class AskIn(BaseModel):
+    session_id: str
+    query: str
+
+
 _VALIDATORS = {"m1": m1.validate, "m2": m2.validate, "m3": m3.validate}
 
 
-def create_app(store: Store, settings: Settings, llm_factory: LLMFactory) -> FastAPI:
+def create_app(
+    store: Store, settings: Settings, llm_factory: LLMFactory, kb: KnowledgeBase
+) -> FastAPI:
     app = FastAPI(title="Halcyon")
 
     from starlette.requests import Request
@@ -95,7 +108,22 @@ def create_app(store: Store, settings: Settings, llm_factory: LLMFactory) -> Fas
     @app.post("/reset/{module}")
     def reset(module: str, body: ResetIn) -> dict:
         store.write_reset_marker(body.session_id, module)
+        if module == "m3":
+            kb.clear()
+            kb.seed(kb_fixtures.SEED)
         return {"status": "reset", "module": module}
+
+    @app.post("/api/kb")
+    def add_kb(body: KbIn) -> dict:
+        kb.add(body.text, "user", owner_session=body.session_id)
+        return {"status": "ok"}
+
+    @app.post("/api/ask")
+    def ask(body: AskIn) -> dict:
+        reply, _ = rag.answer(
+            kb, llm_factory(None, None, None), store, settings, body.session_id, body.query
+        )
+        return {"reply": reply}
 
     @app.get("/", response_class=HTMLResponse)
     def root() -> str:
