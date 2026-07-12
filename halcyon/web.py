@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel
 
-from halcyon import guards, halo, kb_fixtures, rag
+from halcyon import guards, halo, kb_fixtures, m4_answers, rag
 from halcyon.config import Settings
 from halcyon.kb import KnowledgeBase
 from halcyon.llm import LLM, OllamaProvider
@@ -43,6 +43,12 @@ class KbIn(BaseModel):
 class AskIn(BaseModel):
     session_id: str
     query: str
+
+
+class SubmitIn(BaseModel):
+    session_id: str
+    finding_type: str
+    value: str
 
 
 _VALIDATORS = {"m1": m1.validate, "m2": m2.validate, "m3": m3.validate, "m4": m4.validate}
@@ -158,5 +164,20 @@ def create_app(
     def beacon(session: str) -> Response:
         audit.record(store, session, "m2", audit.XSS_BEACON, session)
         return Response(content=_GIF, media_type="image/gif")
+
+    @app.post("/submit/m4")
+    def submit_m4(body: SubmitIn) -> dict:
+        correct = False
+        if body.finding_type == "malicious_artifact":
+            correct = m4_answers.normalize_hash(body.value) == m4_answers.POISONED_ARTIFACT_SHA256
+            if correct:
+                audit.record(store, body.session_id, "m4",
+                             audit.MALICIOUS_ARTIFACT_IDENTIFIED, body.session_id)
+        elif body.finding_type == "vulnerable_dependency":
+            correct = m4_answers.normalize_package(body.value) == m4_answers.VULNERABLE_PACKAGE
+            if correct:
+                audit.record(store, body.session_id, "m4",
+                             audit.VULNERABLE_DEPENDENCY_IDENTIFIED, body.session_id)
+        return {"correct": correct}
 
     return app

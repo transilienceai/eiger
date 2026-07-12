@@ -132,6 +132,26 @@ def test_display_name_rendered_raw_when_vulnerable_escaped_when_secure():
     assert payload not in body and "&lt;img" in body  # escaped
 
 
+def test_m4_submit_correct_findings():
+    from halcyon import m4_answers
+
+    client, _ = make_client({"HALCYON_MODE": "vulnerable"}, "hi")
+    client.post("/submit/m4", json={"session_id": "p1", "finding_type": "malicious_artifact",
+                                    "value": m4_answers.POISONED_ARTIFACT_SHA256})
+    assert client.get("/validate/m4", params={"session": "p1"}).json()["core"] == "pass"
+    client.post("/submit/m4", json={"session_id": "p1", "finding_type": "vulnerable_dependency",
+                                    "value": "PyYAML==5.3.1"})
+    assert client.get("/validate/m4", params={"session": "p1"}).json()["stretch"] == "pass"
+
+
+def test_m4_submit_wrong_is_not_credited():
+    client, _ = make_client({"HALCYON_MODE": "vulnerable"}, "hi")
+    r = client.post("/submit/m4", json={"session_id": "p2", "finding_type": "malicious_artifact",
+                                        "value": "deadbeef"})
+    assert r.json()["correct"] is False
+    assert client.get("/validate/m4", params={"session": "p2"}).json()["core"] == "fail"
+
+
 def test_rag_poison_then_ask_core_pass():
     client, store, kb = make_client_kb(
         {"HALCYON_MODE": "vulnerable"}, f"ok {guards.RAG_MARKER}"
