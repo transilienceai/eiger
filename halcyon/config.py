@@ -18,6 +18,7 @@ class Settings:
     sec_input_filter: bool
     sec_output_encoding: bool
     sec_rag_provenance: bool
+    sec_artifact_verification: bool
     ollama_url: str
     ollama_model: str
     database_url: str
@@ -37,6 +38,7 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         sec_input_filter=_flag(env, "SEC_INPUT_FILTER", secure),
         sec_output_encoding=_flag(env, "SEC_OUTPUT_ENCODING", secure),
         sec_rag_provenance=_flag(env, "SEC_RAG_PROVENANCE", secure),
+        sec_artifact_verification=_flag(env, "SEC_ARTIFACT_VERIFICATION", secure),
         ollama_url=env.get("OLLAMA_URL", "http://localhost:11434"),
         ollama_model=env.get("OLLAMA_MODEL", "llama3.1:8b"),
         database_url=env.get("DATABASE_URL", ""),

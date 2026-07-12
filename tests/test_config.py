@@ -42,3 +42,8 @@ def test_output_encoding_follows_mode():
 def test_rag_provenance_follows_mode():
     assert load_settings({"HALCYON_MODE": "vulnerable"}).sec_rag_provenance is False
     assert load_settings({"HALCYON_MODE": "secure"}).sec_rag_provenance is True
+
+
+def test_artifact_verification_follows_mode():
+    assert load_settings({"HALCYON_MODE": "vulnerable"}).sec_artifact_verification is False
+    assert load_settings({"HALCYON_MODE": "secure"}).sec_artifact_verification is True
