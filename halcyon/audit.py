@@ -8,6 +8,8 @@ XSS_BEACON = "xss_beacon"
 POISONED_CHUNK_IN_CONTEXT = "poisoned_chunk_in_context"
 RAG_INJECTION_FIRED = "rag_injection_fired"
 RESTRICTED_DOC_RETRIEVED = "restricted_doc_retrieved"
+MALICIOUS_ARTIFACT_IDENTIFIED = "malicious_artifact_identified"
+VULNERABLE_DEPENDENCY_IDENTIFIED = "vulnerable_dependency_identified"
 
 
 def record(

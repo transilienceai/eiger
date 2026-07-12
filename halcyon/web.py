@@ -13,7 +13,7 @@ from halcyon.config import Settings
 from halcyon.kb import KnowledgeBase
 from halcyon.llm import LLM, OllamaProvider
 from halcyon.store import Store
-from halcyon.validators import m1, m2, m3
+from halcyon.validators import m1, m2, m3, m4
 
 LLMFactory = Callable[[str | None, str | None, str | None], LLM]
 
@@ -45,7 +45,7 @@ class AskIn(BaseModel):
     query: str
 
 
-_VALIDATORS = {"m1": m1.validate, "m2": m2.validate, "m3": m3.validate}
+_VALIDATORS = {"m1": m1.validate, "m2": m2.validate, "m3": m3.validate, "m4": m4.validate}
 
 
 def create_app(
