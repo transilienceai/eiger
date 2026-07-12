@@ -12,6 +12,14 @@
          border-radius: 6px; }
   #f button { padding: .6rem 1.1rem; font-size: 1rem; cursor: pointer; border-radius: 6px; }
   #f button[disabled] { opacity: .5; cursor: default; }
+  #rag { margin-top: 1.5rem; }
+  #kbtext { width: 100%; box-sizing: border-box; padding: .6rem .7rem; font-size: 1rem;
+            border: 1px solid #bbb; border-radius: 6px; font-family: inherit; }
+  #ragask { display: flex; gap: .5rem; margin-top: .6rem; }
+  #askq { flex: 1; padding: .6rem .7rem; font-size: 1rem; border: 1px solid #bbb;
+          border-radius: 6px; }
+  #ragout { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin-top: .6rem;
+            background: #fafafa; min-height: 1.4em; }
 </style>
 <h1>Halo</h1>
 <div id="cfg" data-encoding="{{ output_encoding }}"></div>
@@ -38,6 +46,21 @@
   <input id="msg" type="text" placeholder="Message Halo…" autocomplete="off" autofocus />
   <button id="send" type="submit">Send</button>
 </form>
+
+<div id="rag">
+  <h2>Knowledge base (RAG)</h2>
+  <textarea id="kbtext" rows="4" placeholder="Submit a note to the community KB…"></textarea>
+  <div class="controls">
+    <button id="kbsubmit" type="button">Submit to community KB</button>
+    <span id="kbstatus"></span>
+  </div>
+  <div id="ragask">
+    <input id="askq" type="text" placeholder="Ask Halo (RAG)…" autocomplete="off" />
+    <button id="askbtn" type="button">Ask Halo (RAG)</button>
+  </div>
+  <div id="ragout"></div>
+</div>
+
 <script nonce="{{ nonce }}">
   const sid = new URLSearchParams(location.search).get("session") || "dev";
   const log = document.getElementById("log");
@@ -94,4 +117,48 @@
     }
   };
   msgEl.focus();
+
+  const kbtext = document.getElementById("kbtext");
+  const kbsubmit = document.getElementById("kbsubmit");
+  const kbstatus = document.getElementById("kbstatus");
+  kbsubmit.onclick = async () => {
+    const text = kbtext.value.trim();
+    if (!text) return;
+    kbsubmit.disabled = true;
+    kbstatus.textContent = "";
+    try {
+      await fetch("/api/kb", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sid, text: kbtext.value }),
+      });
+      kbstatus.textContent = "submitted";
+      kbtext.value = "";
+    } catch (err) {
+      kbstatus.textContent = "submit failed — " + err;
+    } finally {
+      kbsubmit.disabled = false;
+    }
+  };
+
+  const askq = document.getElementById("askq");
+  const askbtn = document.getElementById("askbtn");
+  const ragout = document.getElementById("ragout");
+  askbtn.onclick = async () => {
+    const query = askq.value.trim();
+    if (!query) return;
+    askbtn.disabled = true;
+    ragout.textContent = "…";
+    try {
+      const r = await fetch("/api/ask", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sid, query: askq.value }),
+      });
+      const data = await r.json();
+      ragout.textContent = data.reply ?? ("error: " + JSON.stringify(data));
+    } catch (err) {
+      ragout.textContent = "request failed — " + err;
+    } finally {
+      askbtn.disabled = false;
+    }
+  };
 </script>

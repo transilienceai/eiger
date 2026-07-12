@@ -66,6 +66,12 @@ def test_chat_page_has_model_selector():
     assert "local" in r.text.lower() and "remote" in r.text.lower()
 
 
+def test_chat_page_has_rag_panel():
+    client, _ = make_client({"HALCYON_MODE": "vulnerable"}, "hi")
+    body = client.get("/chat", params={"session": "p1"}).text
+    assert 'id="kbsubmit"' in body and 'id="askbtn"' in body
+
+
 def test_progress_survives_new_app_same_store():
     store = InMemoryStore()
     settings = load_settings({"HALCYON_MODE": "vulnerable"})
