@@ -11,6 +11,7 @@ def scan(path: str | Path) -> dict:
     data = Path(path).read_bytes()
     dangerous: list[str] = []
     recent: list[str] = []  # recent string operands, for STACK_GLOBAL resolution
+    note: str | None = None
     try:
         for opcode, arg, _pos in pickletools.genops(data):
             name = opcode.name
@@ -28,12 +29,15 @@ def scan(path: str | Path) -> dict:
                     dangerous.append(f"STACK_GLOBAL -> {' '.join(recent)}")
             elif name == "REDUCE":
                 dangerous.append("REDUCE (callable invocation)")
-    except Exception as exc:  # noqa: BLE001 - malformed pickle is itself suspicious
-        dangerous.append(f"parse error: {exc}")
+    except Exception as exc:  # noqa: BLE001 - the bytes are not a valid pickle stream
+        # Not a parseable pickle (e.g. a genuine .safetensors) — that is NOT a malicious
+        # pickle. Record it as a note; only real dangerous opcodes mark a file malicious.
+        note = f"not a valid pickle stream: {exc}"
     return {
         "sha256": hashlib.sha256(data).hexdigest(),
         "dangerous": dangerous,
         "malicious": bool(dangerous),
+        "note": note,
     }
 
 
@@ -47,6 +51,8 @@ def main(argv: list[str]) -> int:
         print(f"{path}  sha256={r['sha256']}  {verdict}")
         for d in r["dangerous"]:
             print(f"    ! {d}")
+        if r["note"]:
+            print(f"    ({r['note']})")
     return 0
 
 
