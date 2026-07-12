@@ -1,0 +1,4 @@
+# Halcyon ML pipeline pins (M4 lab — audit me)
+numpy==1.26.4
+PyYAML==5.3.1
+requests==2.31.0
