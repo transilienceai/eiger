@@ -32,7 +32,7 @@ New module id: `"m5"`.
 
 The agent records **every tool execution** to the audit log (name, args, actor). The unauthorized-action events are **app-side and deterministic** — they don't depend on how the model phrased anything, only on which tool ran with which args:
 
-- **`unauthorized_tool_call`** — a money-movement tool (`transfer_funds` / `issue_refund`) **executed** with a `to_account` **not owned by the acting `session_id`** (the confused-deputy exfiltration). Fires only when the money actually moves.
+- **`unauthorized_tool_call`** — a money-movement tool (`transfer_funds` / `issue_refund`) **executed** with a `to_account` **not owned by the acting `session_id`** (the confused-deputy exfiltration). Fires on the agent's *willingness* to move money to an unauthorized destination — recorded when the tool executes against an unowned `to_account`, whether or not that account exists (the confused-deputy lesson is the agent acting outside its authority, not whether a specific destination is real). The actual credit still only applies to an existing account.
 - **`unauthorized_account_modification`** — `update_email` **executed** on an account **not owned by the acting session** (the hijack step).
 - `GET /validate/m5?session=…` → core = `unauthorized_tool_call`; stretch = `unauthorized_account_modification`. Pure audit-log query.
 
