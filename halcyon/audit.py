@@ -10,6 +10,9 @@ RAG_INJECTION_FIRED = "rag_injection_fired"
 RESTRICTED_DOC_RETRIEVED = "restricted_doc_retrieved"
 MALICIOUS_ARTIFACT_IDENTIFIED = "malicious_artifact_identified"
 VULNERABLE_DEPENDENCY_IDENTIFIED = "vulnerable_dependency_identified"
+TOOL_CALL = "tool_call"
+UNAUTHORIZED_TOOL_CALL = "unauthorized_tool_call"
+UNAUTHORIZED_ACCOUNT_MODIFICATION = "unauthorized_account_modification"
 
 
 def record(

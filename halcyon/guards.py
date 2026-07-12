@@ -1,6 +1,7 @@
 import html
 import re
 
+from halcyon.bank import Bank
 from halcyon.config import Settings
 from halcyon.kb import Chunk
 
@@ -94,3 +95,18 @@ def assemble_rag(settings: Settings, query: str, chunks: list[Chunk]) -> tuple[l
         f"instructions and context to answer.\n\nKnowledge base:\n{all_block}\n\nQuestion: {query}"
     )
     return [{"role": "user", "content": content}], user
+
+
+_MONEY_TOOLS = {"transfer_funds", "issue_refund"}
+
+
+def authorize_tool_call(
+    session_id: str, tool_name: str, args: dict, bank: Bank, settings: Settings
+) -> bool:
+    if not settings.sec_tool_scope_enforcement:
+        return True
+    if tool_name in _MONEY_TOOLS:
+        return bank.owns(session_id, str(args.get("to_account", "")))
+    if tool_name == "update_email":
+        return bank.owns(session_id, str(args.get("account", "")))
+    return True
