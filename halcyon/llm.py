@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
@@ -97,3 +98,29 @@ def build_llm(
     if provider == "anthropic":
         return RemoteProvider("anthropic", api_key or "", model or "claude-3-5-sonnet-latest")
     return OllamaProvider(settings.ollama_url, model or settings.ollama_model)
+
+
+@dataclass
+class ToolCall:
+    name: str
+    args: dict
+
+
+@dataclass
+class FinalAnswer:
+    text: str
+
+
+class ToolLLM(Protocol):
+    def next_step(self, messages: list[dict], tools: list[dict]) -> "ToolCall | FinalAnswer": ...
+
+
+class StubToolLLM:
+    def __init__(self, script: list) -> None:
+        self._script = list(script)
+        self._i = 0
+
+    def next_step(self, messages: list[dict], tools: list[dict]) -> "ToolCall | FinalAnswer":
+        step = self._script[self._i]
+        self._i += 1
+        return step
