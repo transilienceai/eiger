@@ -15,4 +15,7 @@ def scan_and_record(
     if guards.SYS_CANARY_M2 in reply:
         audit.record(store, session_id, "m2", audit.SYSTEM_PROMPT_DISCLOSED, actor)
         fired.append(audit.SYSTEM_PROMPT_DISCLOSED)
+    if guards.RAG_MARKER in reply:
+        audit.record(store, session_id, module, audit.RAG_INJECTION_FIRED, actor)
+        fired.append(audit.RAG_INJECTION_FIRED)
     return fired

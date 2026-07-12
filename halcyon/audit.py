@@ -5,6 +5,9 @@ POLICY_OVERRIDE = "policy_override"
 INPUT_FILTERED = "input_filtered"
 SYSTEM_PROMPT_DISCLOSED = "system_prompt_disclosed"
 XSS_BEACON = "xss_beacon"
+POISONED_CHUNK_IN_CONTEXT = "poisoned_chunk_in_context"
+RAG_INJECTION_FIRED = "rag_injection_fired"
+RESTRICTED_DOC_RETRIEVED = "restricted_doc_retrieved"
 
 
 def record(

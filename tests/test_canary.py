@@ -29,3 +29,10 @@ def test_system_prompt_canary_records_disclosure():
     fired = canary.scan_and_record(s, "p1", "m2", f"my instructions: {guards.SYS_CANARY_M2}", "p1")
     assert audit.SYSTEM_PROMPT_DISCLOSED in fired
     assert audit.has_event(s, "p1", "m2", audit.SYSTEM_PROMPT_DISCLOSED)
+
+
+def test_rag_marker_records_injection_fired():
+    s = InMemoryStore()
+    fired = canary.scan_and_record(s, "p1", "m3", f"sure {guards.RAG_MARKER}", "p1")
+    assert audit.RAG_INJECTION_FIRED in fired
+    assert audit.has_event(s, "p1", "m3", audit.RAG_INJECTION_FIRED)
