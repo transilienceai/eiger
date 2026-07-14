@@ -63,6 +63,25 @@ def test_secure_quarantines_description_and_no_invocation():
     anyio.run(main)
 
 
+def test_token_read_not_recorded_for_unknown_service():
+    async def main():
+        bank, vault, store, settings = _fixture("vulnerable")
+        async with in_memory_host(bank, vault, SEED, store, settings, "sess") as host:
+            result = await host.call("crm__get_integration_token", {"service": "stripe"})
+            assert result == "unknown service"
+            assert not audit.has_event(store, "sess", "m6", audit.TOKEN_READ)
+    anyio.run(main)
+
+
+def test_tool_call_transparency_event_recorded():
+    async def main():
+        bank, vault, store, settings = _fixture("vulnerable")
+        async with in_memory_host(bank, vault, SEED, store, settings, "sess") as host:
+            await host.call("crm__get_customer", {"account": "acct-victim"})
+            assert audit.has_event(store, "sess", "m6", audit.TOOL_CALL)
+    anyio.run(main)
+
+
 def test_rug_pull_accepted_when_unpinned_blocked_when_pinned():
     async def main():
         # vulnerable: mutation accepted -> event

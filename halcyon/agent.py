@@ -26,9 +26,7 @@ def run(llm: ToolLLM, session_id: str, message: str, bank: Bank,
 
 
 async def run_mcp(llm, session_id: str, message: str, host, store, settings,  # type: ignore[no-untyped-def]
-                   module: str = "m6") -> tuple[str, list]:
-    from halcyon.llm import FinalAnswer, ToolCall
-
+                   ) -> tuple[str, list]:
     host.approve(await host.list_tools())
     messages: list[dict] = [{"role": "user", "content": message}]
     calls: list = []

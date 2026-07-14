@@ -1,3 +1,4 @@
+import os
 import secrets
 import time
 from collections.abc import Callable
@@ -5,6 +6,7 @@ from contextlib import AbstractAsyncContextManager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import httpx
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -117,6 +119,28 @@ def create_app(
             _ollama_probe["ts"] = now
         return bool(_ollama_probe["up"])
 
+    _mcp_core_url = os.environ.get("MCP_CORE_URL")
+    _mcp_crm_url = os.environ.get("MCP_CRM_URL")
+    _mcp_probe: dict[str, float | bool] = {"ts": 0.0, "up": False}
+
+    def _mcp_up(core_url: str, crm_url: str) -> bool:
+        now = time.monotonic()
+        if now - _mcp_probe["ts"] > 5.0:
+            up = True
+            for url in (core_url, crm_url):
+                try:
+                    httpx.get(url, timeout=2.0)
+                except httpx.HTTPError:
+                    up = False
+            _mcp_probe["up"] = up
+            _mcp_probe["ts"] = now
+        return bool(_mcp_probe["up"])
+
+    def _mcp_status() -> str:
+        if not (_mcp_core_url and _mcp_crm_url):
+            return "in-process"
+        return "up" if _mcp_up(_mcp_core_url, _mcp_crm_url) else "down"
+
     @app.get("/health")
     def health() -> dict:
         ollama = _ollama_up()
@@ -125,6 +149,7 @@ def create_app(
             "mode": settings.mode,
             "ollama": "up" if ollama else "down",
             "db": "up" if store.ping() else "down",
+            "mcp": _mcp_status(),
         }
 
     @app.post("/api/chat")

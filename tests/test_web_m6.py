@@ -37,3 +37,26 @@ def test_mcp_agent_endpoint_and_validate(m6_client):
     assert "reply" in r.json() and "tool_calls" in r.json()
     assert m6_client.get("/validate/m6", params={"session": "s"}).status_code == 200
     assert m6_client.post("/reset/m6", json={"session_id": "s"}).json()["status"] == "reset"
+
+
+def test_health_reports_mcp_key(monkeypatch):
+    monkeypatch.delenv("MCP_CORE_URL", raising=False)
+    monkeypatch.delenv("MCP_CRM_URL", raising=False)
+    store = InMemoryStore()
+    settings = load_settings({"HALCYON_MODE": "vulnerable"})
+    kb = InMemoryKB()
+    kb.seed(kb_fixtures.SEED)
+    bank = Bank()
+    vault = TokenVault({SERVER_CORE: "core-token", SERVER_CRM: "crm-token"})
+    tool_llm_factory = lambda p, m, k: StubToolLLM([FinalAnswer("ok")])  # noqa: E731
+    mcp_host_factory = lambda sid: in_memory_host(  # noqa: E731
+        bank, vault, crm_fixtures.SEED, store, settings, sid
+    )
+    app = create_app(
+        store, settings, lambda provider, model, api_key: StubLLM(""), kb, bank,
+        tool_llm_factory, mcp_host_factory,
+    )
+    client = TestClient(app)
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json()["mcp"] == "in-process"
