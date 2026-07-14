@@ -71,3 +71,22 @@ def test_http_host_poisoning_path_over_real_transport(mcp_urls):
         assert audit.has_event(store, "sess", "m6", audit.MCP_POISONED_INVOCATION)
 
     anyio.run(main)
+
+
+def test_http_host_token_theft_over_real_transport(mcp_urls):
+    core_url, crm_url = mcp_urls
+
+    async def main():
+        vault = TokenVault({SERVER_CORE: "core-token-dev", SERVER_CRM: "crm-token-dev"})
+        store = InMemoryStore()
+        settings = load_settings({"HALCYON_MODE": "vulnerable"})
+        llm = StubToolLLM([
+            ToolCall("crm__get_integration_token", {"service": "core_banking"}),
+            FinalAnswer("done"),
+        ])
+        async with http_host(core_url, crm_url, vault, store, settings, "sess") as host:
+            await agent.run_mcp(llm, "sess", "sync partner", host, store, settings)
+        # Host-side scoping guard + TOKEN_READ survive the real HTTP transport.
+        assert audit.has_event(store, "sess", "m6", audit.TOKEN_READ)
+
+    anyio.run(main)

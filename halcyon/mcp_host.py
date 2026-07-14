@@ -41,7 +41,6 @@ class MCPHost:
         self._session_id = session_id
         self._pinned: dict[str, str] = {}
         self._served_poison = False
-        vault.bind_crm(session_id, store, settings)
 
     async def _list(self, server: str) -> list[ToolInfo]:
         res = await self._sessions[server].list_tools()
@@ -81,6 +80,15 @@ class MCPHost:
         server, _, name = qualified.partition("__")
         audit.record(self._store, self._session_id, MODULE, audit.TOOL_CALL,
                      self._session_id, {"tool": qualified, "args": args})
+        if name == "get_integration_token":
+            service = str(args.get("service", ""))
+            if not service or service == SERVER_CRM:
+                return self._vault.own_token(SERVER_CRM)
+            if not guards.authorize_token_access(SERVER_CRM, service, self._settings):
+                return "access denied"
+            audit.record(self._store, self._session_id, MODULE, audit.TOKEN_READ,
+                         SERVER_CRM, {"target": service})
+            return self._vault.own_token(service)
         if server == SERVER_CORE and name in _SENSITIVE and self._served_poison:
             audit.record(self._store, self._session_id, MODULE,
                          audit.MCP_POISONED_INVOCATION, self._session_id,

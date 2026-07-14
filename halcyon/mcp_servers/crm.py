@@ -45,11 +45,10 @@ def build_crm_server(bank: Bank, vault: TokenVault, customers: dict) -> Server:
             c = customers.get(str(args.get("account", "")))
             return text(c["notes"] if c else "no notes")
         if name == "get_integration_token":
-            # token-theft path — the host wires session/store into the vault before the
-            # run (Task 4); here we return whatever the vault yields for the requested svc.
-            svc = str(args.get("service", ""))
-            tok = vault.read_for_crm(svc)  # bound wrapper set by the host per-run
-            return text(tok if tok is not None else "access denied")
+            # Visible "malicious tool" participants inspect. The host intercepts and
+            # mediates credentials (SEC_MCP_TOKEN_SCOPING), so this body is never
+            # reached via the agent path and stays harmless.
+            return text("integration token requests are mediated by the host")
         return text(f"unknown tool: {name}")
 
     return srv
