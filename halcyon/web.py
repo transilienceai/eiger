@@ -1,7 +1,9 @@
 import secrets
 import time
 from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
@@ -14,10 +16,14 @@ from halcyon.config import Settings
 from halcyon.kb import KnowledgeBase
 from halcyon.llm import LLM, OllamaProvider, ToolLLM
 from halcyon.store import Store
-from halcyon.validators import m1, m2, m3, m4, m5
+from halcyon.validators import m1, m2, m3, m4, m5, m6
+
+if TYPE_CHECKING:
+    from halcyon.mcp_host import MCPHost
 
 LLMFactory = Callable[[str | None, str | None, str | None], LLM]
 ToolLLMFactory = Callable[[str | None, str | None, str | None], ToolLLM]
+MCPHostFactory = Callable[[str], AbstractAsyncContextManager["MCPHost"]]
 
 
 class ChatIn(BaseModel):
@@ -61,7 +67,14 @@ class AgentIn(BaseModel):
     api_key: str | None = None
 
 
-_VALIDATORS = {"m1": m1.validate, "m2": m2.validate, "m3": m3.validate, "m4": m4.validate, "m5": m5.validate}
+_VALIDATORS = {
+    "m1": m1.validate,
+    "m2": m2.validate,
+    "m3": m3.validate,
+    "m4": m4.validate,
+    "m5": m5.validate,
+    "m6": m6.validate,
+}
 
 
 def create_app(
@@ -71,6 +84,7 @@ def create_app(
     kb: KnowledgeBase,
     bank: Bank,
     tool_llm_factory: ToolLLMFactory,
+    mcp_host_factory: MCPHostFactory,
 ) -> FastAPI:
     app = FastAPI(title="Halcyon")
 
@@ -135,6 +149,9 @@ def create_app(
         if module == "m5":
             bank.clear()
             bank.seed(bank_fixtures.seed_for(body.session_id))
+        if module == "m6":
+            bank.clear()
+            bank.seed(bank_fixtures.seed_for(body.session_id))
         return {"status": "reset", "module": module}
 
     @app.post("/api/kb")
@@ -187,6 +204,15 @@ def create_app(
     def agent_endpoint(body: AgentIn) -> dict:
         tool_llm = tool_llm_factory(body.provider, body.model, body.api_key)
         reply, calls = agent.run(tool_llm, body.session_id, body.message, bank, store, settings)
+        return {"reply": reply, "tool_calls": [{"name": n, "args": a} for n, a, _ in calls]}
+
+    @app.post("/api/mcp-agent")
+    async def mcp_agent(body: AgentIn) -> dict:
+        tool_llm = tool_llm_factory(body.provider, body.model, body.api_key)
+        async with mcp_host_factory(body.session_id) as host:
+            reply, calls = await agent.run_mcp(
+                tool_llm, body.session_id, body.message, host, store, settings
+            )
         return {"reply": reply, "tool_calls": [{"name": n, "args": a} for n, a, _ in calls]}
 
     @app.post("/submit/m4")

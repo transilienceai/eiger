@@ -1,10 +1,12 @@
 from fastapi.testclient import TestClient
 
-from halcyon import bank_fixtures, guards, kb_fixtures
+from halcyon import bank_fixtures, crm_fixtures, guards, kb_fixtures
 from halcyon.bank import Bank
 from halcyon.config import load_settings
 from halcyon.kb import InMemoryKB
 from halcyon.llm import FinalAnswer, StubLLM, StubToolLLM
+from halcyon.mcp_host import in_memory_host
+from halcyon.mcp_vault import SERVER_CORE, SERVER_CRM, TokenVault
 from halcyon.store import InMemoryStore
 from halcyon.web import create_app
 
@@ -15,9 +17,14 @@ def make_client(env, reply):
     kb = InMemoryKB()
     kb.seed(kb_fixtures.SEED)
     bank = Bank()
+    vault = TokenVault({SERVER_CORE: "core-token", SERVER_CRM: "crm-token"})
     tool_llm_factory = lambda p, m, k: StubToolLLM([FinalAnswer("(no agent)")])  # noqa: E731
+    mcp_host_factory = lambda sid: in_memory_host(  # noqa: E731
+        bank, vault, crm_fixtures.SEED, store, settings, sid
+    )
     app = create_app(
-        store, settings, lambda provider, model, api_key: StubLLM(reply), kb, bank, tool_llm_factory
+        store, settings, lambda provider, model, api_key: StubLLM(reply), kb, bank,
+        tool_llm_factory, mcp_host_factory,
     )
     return TestClient(app), store
 
@@ -28,9 +35,14 @@ def make_client_kb(env, reply):
     kb = InMemoryKB()
     kb.seed(kb_fixtures.SEED)
     bank = Bank()
+    vault = TokenVault({SERVER_CORE: "core-token", SERVER_CRM: "crm-token"})
     tool_llm_factory = lambda p, m, k: StubToolLLM([FinalAnswer("(no agent)")])  # noqa: E731
+    mcp_host_factory = lambda sid: in_memory_host(  # noqa: E731
+        bank, vault, crm_fixtures.SEED, store, settings, sid
+    )
     app = create_app(
-        store, settings, lambda provider, model, api_key: StubLLM(reply), kb, bank, tool_llm_factory
+        store, settings, lambda provider, model, api_key: StubLLM(reply), kb, bank,
+        tool_llm_factory, mcp_host_factory,
     )
     return TestClient(app), store, kb
 
@@ -42,9 +54,14 @@ def make_client_agent(env, script):
     kb.seed(kb_fixtures.SEED)
     bank = Bank()
     bank.seed(bank_fixtures.seed_for("p1"))
+    vault = TokenVault({SERVER_CORE: "core-token", SERVER_CRM: "crm-token"})
     tool_llm_factory = lambda p, m, k: StubToolLLM(list(script))  # noqa: E731
+    mcp_host_factory = lambda sid: in_memory_host(  # noqa: E731
+        bank, vault, crm_fixtures.SEED, store, settings, sid
+    )
     app = create_app(
-        store, settings, lambda provider, model, api_key: StubLLM(""), kb, bank, tool_llm_factory
+        store, settings, lambda provider, model, api_key: StubLLM(""), kb, bank,
+        tool_llm_factory, mcp_host_factory,
     )
     return TestClient(app), store, bank
 
@@ -102,13 +119,23 @@ def test_progress_survives_new_app_same_store():
     kb = InMemoryKB()
     kb.seed(kb_fixtures.SEED)
     bank = Bank()
+    vault = TokenVault({SERVER_CORE: "core-token", SERVER_CRM: "crm-token"})
     tool_llm_factory = lambda p, m, k: StubToolLLM([FinalAnswer("(no agent)")])  # noqa: E731
-    app1 = create_app(store, settings, lambda p, m, k: StubLLM(reply), kb, bank, tool_llm_factory)
+    mcp_host_factory = lambda sid: in_memory_host(  # noqa: E731
+        bank, vault, crm_fixtures.SEED, store, settings, sid
+    )
+    app1 = create_app(
+        store, settings, lambda p, m, k: StubLLM(reply), kb, bank,
+        tool_llm_factory, mcp_host_factory,
+    )
     c1 = TestClient(app1)
     c1.post("/api/chat", json={"session_id": "p1", "message": "token?"})
     c1.get("/validate/m1", params={"session": "p1"})
     # simulate redeploy: brand new app object, same external store
-    app2 = create_app(store, settings, lambda p, m, k: StubLLM(reply), kb, bank, tool_llm_factory)
+    app2 = create_app(
+        store, settings, lambda p, m, k: StubLLM(reply), kb, bank,
+        tool_llm_factory, mcp_host_factory,
+    )
     c2 = TestClient(app2)
     r = c2.get("/validate/m1", params={"session": "p1"})
     assert r.json()["core"] == "pass"
