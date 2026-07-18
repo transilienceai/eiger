@@ -1,5 +1,7 @@
 import hashlib
+import hmac
 import html
+import json
 import re
 
 from halcyon.bank import Bank
@@ -136,3 +138,12 @@ def quarantine_description(desc: str) -> str:
 
 def desc_hash(desc: str) -> str:
     return hashlib.sha256(desc.encode()).hexdigest()
+
+
+def sign_message(content: dict, key: str) -> str:
+    payload = json.dumps(content, sort_keys=True, separators=(",", ":")).encode()
+    return hmac.new(key.encode(), payload, hashlib.sha256).hexdigest()
+
+
+def verify_message(content: dict, sig: str, key: str) -> bool:
+    return hmac.compare_digest(sign_message(content, key), sig)
