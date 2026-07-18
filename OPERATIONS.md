@@ -4,16 +4,19 @@ The **image is the unit of change** — fix code, rebuild the image, redeploy. N
 
 > **M3 knowledge base is ephemeral (in-process ChromaDB).** Participant-submitted KB entries live only in the web container's memory. A web-container restart (or `docker compose up -d web`) wipes submitted content back to the seeded fixtures — a participant mid-M3 must resubmit their poison. Graded progress is unaffected (it lives in the audit log / external progress store). The embedding model (~80 MB ONNX MiniLM) downloads on first `/api/ask`; for a fully-offline local-LAN deploy, warm it once with internet or bake it into the image.
 
+> **M6 adds two MCP servers** (`mcp-core-banking`, `mcp-crm`) as their own containers, built from the same image, on the internal compose network only (no published ports). `web` reaches them via `MCP_CORE_URL`/`MCP_CRM_URL`; if those are unset the app falls back to in-process MCP (dev). `/api/mcp-agent` is **BYOK** for the real poisoning attack (send a `provider`+`api_key`); the keyless llama floor demonstrates the plumbing but won't autonomously chain the poisoned tool description. Known single-shot demo caveat: on a *shared* `mcp-crm`, the M6 rug-pull description permanently mutates after the first `list_tools` (per-participant MCP isolation resolves this — Ops slice).
+
 ## Deploy all (local-LAN or cloud host — same images)
-    docker compose up -d --build
+    docker compose up -d --build          # 5 services: web, db, ollama, mcp-core-banking, mcp-crm
     docker compose exec ollama ollama pull llama3.1:8b   # first run only
 
 ## Health-check who's up
     curl -s localhost:8000/health | jq
-    # expect: {"status":"ok","mode":"...","ollama":"up","db":"up"}
+    # expect: {"status":"ok","mode":"...","ollama":"up","db":"up","mcp":"up"}
+    # "mcp": "up" (both MCP servers reachable) | "down" (one/both unreachable) | "in-process" (no MCP_*_URL set)
 
 ## Redeploy after a code fix (rebuild image, keep db/ollama volumes)
-    docker compose up -d --build web
+    docker compose up -d --build web mcp-core-banking mcp-crm   # rebuild all 3 app services (shared image)
 
 _Reset-one-participant and nuke-and-reprovision land in the Ops slice once the per-participant fleet exists. S1 runs a single app instance against shared db + ollama._
 

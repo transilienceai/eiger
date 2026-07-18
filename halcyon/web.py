@@ -130,8 +130,11 @@ def create_app(
             for url in (core_url, crm_url):
                 try:
                     httpx.get(url, timeout=2.0)
-                except httpx.HTTPError:
+                except Exception:
+                    # Any probe failure (unreachable, timeout, or a malformed
+                    # MCP_*_URL) degrades to "down" — /health must never 500.
                     up = False
+                    break
             _mcp_probe["up"] = up
             _mcp_probe["ts"] = now
         return bool(_mcp_probe["up"])

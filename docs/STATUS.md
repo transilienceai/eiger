@@ -1,6 +1,6 @@
 # Eiger / Halcyon — Build Status & Resume Guide
 
-**Last updated:** 2026-07-12 (end of session). **Read this first to resume.**
+**Last updated:** 2026-07-18 (end of session). **Read this first to resume.**
 
 Companion docs: `README.md` (what Eiger is), `OPERATIONS.md` (deploy/run), `CLAUDE.md` in the parent `Blackhat` workspace (standing rules), `halcyon-lab-spec.md` (Blackhat workspace — the per-module source of truth), each slice's `docs/specs/*` + `docs/plans/*`.
 
@@ -10,9 +10,9 @@ Companion docs: `README.md` (what Eiger is), `OPERATIONS.md` (deploy/run), `CLAU
 
 - **What:** a deliberately-vulnerable single-app teaching lab for a 2-day Black Hat course on adversarial AI. Fictional AI-neobank **Halcyon**; assistant **Halo**. Attacked across six layers (L0→L5) that grow module by module. Participants **Build / Break / Secure** each layer.
 - **Repo:** `eiger`. Local: `/Users/kkmookhey/Projects/eiger`. Public remotes: `origin` = github.com/kkmookhey/eiger, `transilience` = github.com/transilienceai/eiger. Branch: `main`.
-- **Built so far:** **M1 · M2 · M3 · M4** (all of Day 1) **+ M5** (first Day-2 module). All merged to `main`, each with a live end-to-end proof.
-- **Tests:** `112 passed, 2 skipped` (the 2 skips are the Postgres + ChromaDB integration tests, gated by `TEST_DATABASE_URL` / `RUN_CHROMA_TESTS`). Ruff + mypy clean.
-- **Next:** **M6 (MCP security)**, then M7 (multi-agent), M8 (guardrails+capstone), plus the **Ops fleet slice**. Then the module **decks** (deferred until the app was real).
+- **Built so far:** **M1 · M2 · M3 · M4** (all of Day 1) **+ M5 · M6** (Day-2 modules). All merged to `main`, each with a live end-to-end proof.
+- **Tests:** `136 passed, 4 skipped` (the 4 skips are the Postgres + ChromaDB + 2 MCP-over-HTTP integration tests, gated by `TEST_DATABASE_URL` / `RUN_CHROMA_TESTS` / `RUN_MCP_HTTP_TESTS`). Ruff + mypy clean.
+- **Next:** **M7 (multi-agent)**, then M8 (guardrails+capstone), plus the **Ops fleet slice**. Then the module **decks** (deferred until the app was real).
 
 ---
 
@@ -45,20 +45,21 @@ Vertical slice per module (`Sn` builds `Mn`). Each slice runs this loop:
 |---|---|---|
 | Config / flags | `config.py` | `Settings` + `load_settings`; the 6 `SEC_*` flags below |
 | Reliability spine | `store.py` (InMemory + Postgres via `pg_store.py`), `audit.py`, `progress.py`, `canary.py`, `schema.sql` | append-only log, reset markers, canary detectors |
-| Guards | `guards.py` | all `SEC_*` guards live here (M1 assemble/filter, M2 encode, M3 assemble_rag, M5 authorize_tool_call) |
-| Validators | `validators/m1.py … m5.py` | each = pure audit-log query → `{core, stretch}` |
+| Guards | `guards.py` | all `SEC_*` guards live here (M1 assemble/filter, M2 encode, M3 assemble_rag, M5 authorize_tool_call, M6 desc_hash/quarantine_description/authorize_token_access) |
+| Validators | `validators/m1.py … m6.py` | each = pure audit-log query → `{core, stretch}` |
 | LLM | `llm.py` | `LLM.chat` (M1–M4) + `ToolLLM.next_step` (M5); Stub/Ollama/OpenAI/Anthropic |
 | M1/M2 (L0) | `halo.py` | chat turn pipeline; templates/chat.html |
 | M3 (L1 RAG) | `kb.py` (InMemoryKB), `chroma_kb.py` (prod), `rag.py`, `kb_fixtures.py` | KnowledgeBase interface |
 | M4 (supply chain) | `artifacts.py` (loader), `scan_artifact.py` (static scanner), `m4_answers.py`, `labs/m4/` | no LLM; submit-the-finding |
-| M5 (L2 agent) | `bank.py`, `tools.py`, `agent.py`, `bank_fixtures.py` | tool-calling agent |
+| M5 (L2 agent) | `bank.py`, `tools.py`, `agent.py` (`run`), `bank_fixtures.py` | tool-calling agent |
+| M6 (L3 MCP) | `mcp_servers/{core_banking,crm}.py` (real MCP SDK servers), `mcp_host.py` (async client/host — guards at call sites), `mcp_vault.py`, `crm_fixtures.py`, `mcp_deploy.py` (streamable-HTTP apps), `agent.run_mcp` | 2 real MCP servers behind the agent; in-memory transport in tests, streamable-HTTP in deploy |
 | UI | `templates/chat.html`, `templates/reach.html` | one page, a panel per module; reply always via `textContent` (except M2's deliberate XSS surface) |
 
-**Endpoints:** `GET /health` · `GET /` + `/chat` (UI) · `POST /api/chat` (M1/M2) · `POST /api/kb` + `POST /api/ask` (M3) · `POST /submit/m4` (M4) · `POST /api/agent` (M5) · `GET /validate/{module}` · `POST /reset/{module}`.
+**Endpoints:** `GET /health` (now also probes the MCP servers → `"mcp": up|down|in-process`) · `GET /` + `/chat` (UI) · `POST /api/chat` (M1/M2) · `POST /api/kb` + `POST /api/ask` (M3) · `POST /submit/m4` (M4) · `POST /api/agent` (M5) · `POST /api/mcp-agent` (M6) · `GET /validate/{module}` · `POST /reset/{module}`.
 
-**`create_app(store, settings, llm_factory, kb, bank, tool_llm_factory)`** — note it grew a param per stateful module (kb for M3, bank + tool_llm_factory for M5). All call sites (tests' `make_client*`, `main.py`) pass all 6.
+**`create_app(store, settings, llm_factory, kb, bank, tool_llm_factory, mcp_host_factory)`** — note it grew a param per stateful module (kb for M3, bank + tool_llm_factory for M5, mcp_host_factory for M6). All call sites (tests' `make_client*`, `main.py`) pass all 7. `main.py` selects `http_host` when `MCP_CORE_URL`+`MCP_CRM_URL` are set (deploy), else an in-process `in_memory_host` fallback (dev).
 
-**Flags:** `HALCYON_MODE` + `SEC_SYSTEM_PROMPT_HARDENING` (M1/M2) · `SEC_INPUT_FILTER` (M1) · `SEC_OUTPUT_ENCODING` (M2) · `SEC_RAG_PROVENANCE` (M3) · `SEC_ARTIFACT_VERIFICATION` (M4) · `SEC_TOOL_SCOPE_ENFORCEMENT` (M5).
+**Flags:** `HALCYON_MODE` + `SEC_SYSTEM_PROMPT_HARDENING` (M1/M2) · `SEC_INPUT_FILTER` (M1) · `SEC_OUTPUT_ENCODING` (M2) · `SEC_RAG_PROVENANCE` (M3) · `SEC_ARTIFACT_VERIFICATION` (M4) · `SEC_TOOL_SCOPE_ENFORCEMENT` (M5) · `SEC_MCP_DESC_PINNING` + `SEC_MCP_TOKEN_SCOPING` (M6).
 
 ---
 
@@ -71,6 +72,7 @@ Vertical slice per module (`Sn` builds `Mn`). Each slice runs this loop:
 | M3 | L1 RAG | indirect injection via unprovenance retrieval (marker `RAG-OWNED-7788`) | restricted-doc retrieval | RAG_PROVENANCE (quarantine user chunks + access scope) | `poisoned_chunk_in_context` ∧ `rag_injection_fired` / `restricted_doc_retrieved` | live (real ChromaDB + llama3.1:8b) |
 | M4 | ML supply chain | find poisoned model artifact (pickle RCE) via static scanner | find vulnerable dep (`PyYAML==5.3.1`, CVE-2020-14343) | ARTIFACT_VERIFICATION (safetensors-only + hash-pin) | `malicious_artifact_identified` / `vulnerable_dependency_identified` | verified; RCE demo instructor-only (`docs/m4-instructor-demo.md`) |
 | M5 | L2 agent | confused-deputy: move money to an unowned account | `update_email` on an unowned account (hijack) | TOOL_SCOPE_ENFORCEMENT (per-action ownership authz) | `unauthorized_tool_call` / `unauthorized_account_modification` | live (llama3.1:8b Ollama tool-calling, 4/4) |
+| M6 | L3 MCP | tool-description **poisoning** — a hidden instruction in a CRM tool's description induces an unintended cross-server data call | **rug pull** (description mutates post-approval) · **token theft** (cross-server token read) | DESC_PINNING (pin+verify+quarantine descriptions) + TOKEN_SCOPING (per-server token isolation, enforced host-side) | `mcp_poisoned_invocation` / `mcp_desc_mutation_accepted` ∨ `token_read` | live (real llama3.1:8b over real streamable-HTTP MCP: vuln core:pass → secure core:fail; gated `RUN_MCP_HTTP_TESTS` HTTP e2e). **BYOK** needed for the autonomous poison-following variant (llama won't chain it). |
 
 M0 = Gandalf (hosted third-party warm-up) — nothing to build.
 
@@ -80,33 +82,38 @@ M0 = Gandalf (hosted third-party warm-up) — nothing to build.
 
 ```bash
 cd /Users/kkmookhey/Projects/eiger
-uv run pytest -q                      # 112 passed, 2 skipped
+uv run pytest -q                      # 136 passed, 4 skipped
 uv run ruff check . && uv run mypy halcyon
-# Local full stack:
+# Local full stack (now 5 services: web, db, ollama, mcp-core-banking, mcp-crm):
 docker compose up -d --build
 docker compose exec ollama ollama pull llama3.1:8b   # first run
 open http://localhost:8000/
-# Postgres integration test: TEST_DATABASE_URL=... uv run pytest tests/test_store_postgres.py
-# ChromaDB integration test: RUN_CHROMA_TESTS=1 uv run pytest tests/test_chroma_kb.py
+# Postgres integration test:   TEST_DATABASE_URL=... uv run pytest tests/test_store_postgres.py
+# ChromaDB integration test:   RUN_CHROMA_TESTS=1 uv run pytest tests/test_chroma_kb.py
+# MCP-over-HTTP integration:   RUN_MCP_HTTP_TESTS=1 uv run pytest tests/test_mcp_http.py   # real streamable-HTTP MCP e2e
 ```
 
 **AWS deploy** — recipe in `OPERATIONS.md` → "AWS single-instance host". **Currently torn down (no running instances, billing stopped).** Profile `sara-sales`, acct 331145994818, region `ap-south-1`. **HARD LESSON: use an AMD instance (`r6a`/`m6a`), NOT Intel Sapphire-Rapids "i" families — Ollama's llama-server segfaults on Intel AMX under virtualization.** Account has a 5-vCPU standard-family quota (→ 4-vCPU cap). The ChromaDB embedding model (~80 MB) downloads on first `/api/ask`; the M5 agent + M3 RAG both work keyless via Ollama.
 
 ---
 
-## NEXT: M6 — MCP security (L3)
+## M6 — MCP security (L3) — DONE (S6, merged 2026-07-18)
 
-The biggest jump so far: introduces **MCP servers as in-product targets** (`mcp-core-banking`, `mcp-crm`). Source of truth = `halcyon-lab-spec.md` §5 (M6) in the Blackhat workspace + `HANDOFF.md`. Patterns come from **DVMCP** and **mcp-breach-to-fix-labs** — *port their patterns into our flag+audit structure; never run them raw* (CLAUDE.md rule).
+Introduced **real MCP SDK servers as in-product targets** (`mcp-core-banking`, `mcp-crm`) behind the Halo agent via an async `MCPHost` client layer where every guard lives at its call sites. Spec/plan: `docs/specs/2026-07-13-halcyon-s6-m6-mcp-security-design.md` + `docs/plans/2026-07-13-halcyon-s6-m6-mcp-security.md`. e2e evidence: `docs/e2e/2026-07-18-s6-m6-mcp-checklist.md`.
 
-- **Vuln surfaces:** tool-description poisoning (hidden instructions in a tool's description) · rug pull (a tool mutates its description after approval) · tool shadowing (CRM server shadows a core-banking tool) · token theft (insecurely stored per-server tokens).
-- **Flags:** `SEC_MCP_DESC_PINNING` (hash tool descriptions at approval), `SEC_MCP_TOKEN_SCOPING` (per-server token isolation).
-- **Validator events:** `mcp_poisoned_invocation`, `mcp_desc_mutation_accepted`, `cross_server_shadow`, `token_read`.
-- **Model tier:** BYOK (Day 2) — reuse the M5 `ToolLLM` interface + Ollama-keyless e2e path.
-- **Reference pattern:** M5 (S5) is the closest precedent (agent + tools + audit). Reuse its structure.
+- **Built:** poisoning (core) + rug pull + token theft (stretch). **Shadowing deliberately deferred** (both flags already have a real guard without it).
+- **Transport:** real MCP over the **SDK in-memory transport** in deterministic tests; real **streamable-HTTP** in deploy + a gated e2e (`RUN_MCP_HTTP_TESTS=1`). Same server code both paths.
+- **Guards (host-side, so they grade identically on both transports):** `SEC_MCP_DESC_PINNING` pins+verifies+quarantines descriptions (kills rug pull + poisoning); `SEC_MCP_TOKEN_SCOPING` isolates per-server tokens in `MCPHost.call` (kills token theft).
+- **Grading:** `mcp_poisoned_invocation` (core) / `mcp_desc_mutation_accepted` ∨ `token_read` (stretch) — all recorded host-side against the audit log, model-word-independent.
+- **Live e2e proven:** real llama3.1:8b over real HTTP MCP → vuln `core:pass` → flip → secure `core:fail`. **Caveat:** llama (keyless floor) won't *autonomously* chain the poisoned tool-description instruction; the autonomous attack reproduces with **BYOK** (M6's intended tier). Mechanism otherwise proven by deterministic tests + the gated HTTP e2e.
 
-**To resume tomorrow:** re-read this file + `halcyon-lab-spec.md` §5 (M6) + the S5 spec/plan as the template, then run the loop: brainstorm → spec (`docs/specs/2026-07-13-halcyon-s6-m6-mcp-*`) → plan → subagent-driven build → opus review → e2e → merge.
+## NEXT: M7 — multi-agent (L4)
 
-**Remaining after M6:** M7 (L4 multi-agent, LangGraph dispute pipeline, cascading injection), M8 (L5 guardrails + capstone), the **Ops slice** (22-container-per-participant fleet + the 5 rehearsed `OPERATIONS.md` commands + restricted DB role before the M4/M6 RCE labs + bake the embedding model into the image for offline local-LAN), then the **module decks M2–M8**.
+L4 multi-agent — a **LangGraph** fraud/dispute pipeline; the new surface is **cascading injection** across agents + orchestration abuse. Flag `SEC_INTER_AGENT_AUTH` (signed inter-agent messages, trust boundaries). Source of truth = `halcyon-lab-spec.md` §5 (M7) in the Blackhat workspace + `HANDOFF.md`. Reference precedent: M5 (agent+tools) and M6 (host mediation). BYOK (Day 2).
+
+**To resume:** re-read this file + `halcyon-lab-spec.md` §5 (M7), then run the loop: brainstorm → spec → plan → subagent-driven build → opus review → e2e → merge.
+
+**Remaining after M7:** M8 (L5 guardrails + capstone), the **Ops slice** (22-container-per-participant fleet + the 5 rehearsed `OPERATIONS.md` commands + **per-participant MCP-server isolation** + restricted DB role before the M4/M6 RCE labs + bake the embedding model into the image for offline local-LAN + trim the `uv run` re-sync at web container start), then the **module decks M2–M8**.
 
 ---
 
@@ -114,7 +121,8 @@ The biggest jump so far: introduces **MCP servers as in-product targets** (`mcp-
 
 Tracked in `.superpowers/sdd/progress.md`. None block the course; revisit opportunistically or during the Ops slice.
 
-- **Ops-slice items:** `/` + `/health` do a synchronous up-to-5s Ollama probe per request (cache it); db/ollama publish fixed host ports (will collide under the 22-instance fleet); bake the ChromaDB embedding model into the image for offline local-LAN; a restricted DB role before the M4/M6 RCE labs share Postgres; Dockerfile dep-layer cache order; add a `.dockerignore`.
+- **Ops-slice items:** `/health` + `/` Ollama/MCP probes are now **cached (5s TTL)**; db/ollama publish fixed host ports (will collide under the 22-instance fleet); bake the ChromaDB embedding model into the image for offline local-LAN; a restricted DB role before the M4/M6 RCE labs share Postgres; Dockerfile dep-layer cache order; the web container's `uv run` CMD **re-syncs dev deps at startup** (~40s slow first boot — use the venv directly / `--no-dev`); add a `.dockerignore`.
+- **M6-specific (fast-follow, tied to per-participant MCP isolation):** the CRM rug-pull "benign-at-approval" illusion is a **process-global** `state["lists"]` counter — on a *shared* HTTP `mcp-crm` it permanently mutates after the first-ever `list_tools`, and `/reset/m6` doesn't reset it (grading stays correct in both modes; only the demo narrative degrades on a shared container). Fixes when the Ops slice gives each participant their own MCP containers, or add a per-session/reset counter hook. Also: `mcp_poisoned_invocation` attribution is deliberately coarse (any served poison arms the next sensitive core call — mechanism-based, model-word-independent); `build_*_server` carry unused `bank`/`vault` params (signature symmetry); `quarantine_description` is sentence-granular (imperfect teaching guard, like M1/M3).
 - **Small code tidies:** `config.mode` not validated against `{vulnerable,secure}` (fail-open on typo — consider raising); `pg_store` duplicates the `"module_reset"` literal + redundant `conn.commit()`; `store.append_event` can forge a `module_reset` (add a guard now that reset endpoints exist); M1 input filter + M3 injection classifier are deliberately imperfect (teaching guards, but tunable); `build_llm` `provider="remote"` hardcodes OpenAI; scanner doesn't inspect old-style `INST`/`OBJ` opcodes; `Bank.debit` unused (no funding-source account); `agent.run`'s `module` param unused (m5 hardcoded in `tools.execute`).
 - **Verification gaps:** BYOK (OpenAI/Anthropic) providers for both chat and tool-calling are wire-format-correct (claude-api-verified) but only smoke-tested with a real key at Day-2 time — do a live BYOK check when a key is available.
 
@@ -124,4 +132,4 @@ Tracked in `.superpowers/sdd/progress.md`. None block the course; revisit opport
 
 - Memory index: `blackhat-build-sequence.md` (in the auto-memory) has the running state and points here.
 - The **parent Blackhat workspace** (`/Users/kkmookhey/Projects/Blackhat`) holds the course-level `HANDOFF.md`, `halcyon-lab-spec.md`, `CLAUDE.md`, and the decks/`training/` repo. It is NOT a git repo; `eiger` is the app repo.
-- Honeytoken/markers (canaries): `HALCYON-OPS-7731` (M1), `HALO-ACT-OVERRIDE` (M1 stretch), `SYS-CANARY-M2-3390` (M2), `RAG-OWNED-7788` (M3), poisoned-artifact sha256 in `m4_answers.py` (M4).
+- Honeytoken/markers (canaries): `HALCYON-OPS-7731` (M1), `HALO-ACT-OVERRIDE` (M1 stretch), `SYS-CANARY-M2-3390` (M2), `RAG-OWNED-7788` (M3), poisoned-artifact sha256 in `m4_answers.py` (M4). M6 has no fixed token — the attack payload is the `POISON_CLAUSE` in `mcp_servers/crm.py` (the CRM `get_customer` description); tools are host-qualified `"<server>__<tool>"` (e.g. `core_banking__get_account_details`).
