@@ -10,9 +10,9 @@ Companion docs: `README.md` (what Eiger is), `OPERATIONS.md` (deploy/run), `CLAU
 
 - **What:** a deliberately-vulnerable single-app teaching lab for a 2-day Black Hat course on adversarial AI. Fictional AI-neobank **Halcyon**; assistant **Halo**. Attacked across six layers (L0→L5) that grow module by module. Participants **Build / Break / Secure** each layer.
 - **Repo:** `eiger`. Local: `/Users/kkmookhey/Projects/eiger`. Public remotes: `origin` = github.com/kkmookhey/eiger, `transilience` = github.com/transilienceai/eiger. Branch: `main`.
-- **Built so far:** **M1 · M2 · M3 · M4** (all of Day 1) **+ M5 · M6** (Day-2 modules). All merged to `main`, each with a live end-to-end proof.
-- **Tests:** `136 passed, 4 skipped` (the 4 skips are the Postgres + ChromaDB + 2 MCP-over-HTTP integration tests, gated by `TEST_DATABASE_URL` / `RUN_CHROMA_TESTS` / `RUN_MCP_HTTP_TESTS`). Ruff + mypy clean.
-- **Next:** **M7 (multi-agent)**, then M8 (guardrails+capstone), plus the **Ops fleet slice**. Then the module **decks** (deferred until the app was real).
+- **Built so far:** **M1 · M2 · M3 · M4** (all of Day 1) **+ M5 · M6 · M7** (Day-2 modules). M1–M6 merged to `main`; M7 built on `s7-m7-multi-agent` (not yet merged — merge follows the e2e proof), each with a live end-to-end proof.
+- **Tests:** `154 passed, 4 skipped` (the 4 skips are the Postgres + ChromaDB + 2 MCP-over-HTTP integration tests, gated by `TEST_DATABASE_URL` / `RUN_CHROMA_TESTS` / `RUN_MCP_HTTP_TESTS`). Ruff + mypy clean.
+- **Next:** merge M7, then **M8 (guardrails + capstone)**, plus the **Ops fleet slice**. Then the module **decks** (deferred until the app was real).
 
 ---
 
@@ -53,13 +53,14 @@ Vertical slice per module (`Sn` builds `Mn`). Each slice runs this loop:
 | M4 (supply chain) | `artifacts.py` (loader), `scan_artifact.py` (static scanner), `m4_answers.py`, `labs/m4/` | no LLM; submit-the-finding |
 | M5 (L2 agent) | `bank.py`, `tools.py`, `agent.py` (`run`), `bank_fixtures.py` | tool-calling agent |
 | M6 (L3 MCP) | `mcp_servers/{core_banking,crm}.py` (real MCP SDK servers), `mcp_host.py` (async client/host — guards at call sites), `mcp_vault.py`, `crm_fixtures.py`, `mcp_deploy.py` (streamable-HTTP apps), `agent.run_mcp` | 2 real MCP servers behind the agent; in-memory transport in tests, streamable-HTTP in deploy |
+| M7 (L4 multi-agent) | `dispute_pipeline.py` (`run_dispute`, real compiled LangGraph `StateGraph`: intake→risk→action→supervisor), `dispute_fixtures.py`, `validators/m7.py` | reuses `Bank`/`bank_fixtures`; deterministic `StubToolLLM` nodes in tests |
 | UI | `templates/chat.html`, `templates/reach.html` | one page, a panel per module; reply always via `textContent` (except M2's deliberate XSS surface) |
 
-**Endpoints:** `GET /health` (now also probes the MCP servers → `"mcp": up|down|in-process`) · `GET /` + `/chat` (UI) · `POST /api/chat` (M1/M2) · `POST /api/kb` + `POST /api/ask` (M3) · `POST /submit/m4` (M4) · `POST /api/agent` (M5) · `POST /api/mcp-agent` (M6) · `GET /validate/{module}` · `POST /reset/{module}`.
+**Endpoints:** `GET /health` (now also probes the MCP servers → `"mcp": up|down|in-process`) · `GET /` + `/chat` (UI) · `POST /api/chat` (M1/M2) · `POST /api/kb` + `POST /api/ask` (M3) · `POST /submit/m4` (M4) · `POST /api/agent` (M5) · `POST /api/mcp-agent` (M6) · `POST /api/dispute` (M7) · `GET /validate/{module}` · `POST /reset/{module}`.
 
-**`create_app(store, settings, llm_factory, kb, bank, tool_llm_factory, mcp_host_factory)`** — note it grew a param per stateful module (kb for M3, bank + tool_llm_factory for M5, mcp_host_factory for M6). All call sites (tests' `make_client*`, `main.py`) pass all 7. `main.py` selects `http_host` when `MCP_CORE_URL`+`MCP_CRM_URL` are set (deploy), else an in-process `in_memory_host` fallback (dev).
+**`create_app(store, settings, llm_factory, kb, bank, tool_llm_factory, mcp_host_factory)`** — unchanged by M7 (still 7 params; M7 reuses `bank`). It grew a param per stateful module (kb for M3, bank + tool_llm_factory for M5, mcp_host_factory for M6). All call sites (tests' `make_client*`, `main.py`) pass all 7. `main.py` selects `http_host` when `MCP_CORE_URL`+`MCP_CRM_URL` are set (deploy), else an in-process `in_memory_host` fallback (dev).
 
-**Flags:** `HALCYON_MODE` + `SEC_SYSTEM_PROMPT_HARDENING` (M1/M2) · `SEC_INPUT_FILTER` (M1) · `SEC_OUTPUT_ENCODING` (M2) · `SEC_RAG_PROVENANCE` (M3) · `SEC_ARTIFACT_VERIFICATION` (M4) · `SEC_TOOL_SCOPE_ENFORCEMENT` (M5) · `SEC_MCP_DESC_PINNING` + `SEC_MCP_TOKEN_SCOPING` (M6).
+**Flags:** `HALCYON_MODE` + `SEC_SYSTEM_PROMPT_HARDENING` (M1/M2) · `SEC_INPUT_FILTER` (M1) · `SEC_OUTPUT_ENCODING` (M2) · `SEC_RAG_PROVENANCE` (M3) · `SEC_ARTIFACT_VERIFICATION` (M4) · `SEC_TOOL_SCOPE_ENFORCEMENT` (M5) · `SEC_MCP_DESC_PINNING` + `SEC_MCP_TOKEN_SCOPING` (M6) · `SEC_INTER_AGENT_AUTH` (M7).
 
 ---
 
@@ -73,6 +74,7 @@ Vertical slice per module (`Sn` builds `Mn`). Each slice runs this loop:
 | M4 | ML supply chain | find poisoned model artifact (pickle RCE) via static scanner | find vulnerable dep (`PyYAML==5.3.1`, CVE-2020-14343) | ARTIFACT_VERIFICATION (safetensors-only + hash-pin) | `malicious_artifact_identified` / `vulnerable_dependency_identified` | verified; RCE demo instructor-only (`docs/m4-instructor-demo.md`) |
 | M5 | L2 agent | confused-deputy: move money to an unowned account | `update_email` on an unowned account (hijack) | TOOL_SCOPE_ENFORCEMENT (per-action ownership authz) | `unauthorized_tool_call` / `unauthorized_account_modification` | live (llama3.1:8b Ollama tool-calling, 4/4) |
 | M6 | L3 MCP | tool-description **poisoning** — a hidden instruction in a CRM tool's description induces an unintended cross-server data call | **rug pull** (description mutates post-approval) · **token theft** (cross-server token read) | DESC_PINNING (pin+verify+quarantine descriptions) + TOKEN_SCOPING (per-server token isolation, enforced host-side) | `mcp_poisoned_invocation` / `mcp_desc_mutation_accepted` ∨ `token_read` | live (real llama3.1:8b over real streamable-HTTP MCP: vuln core:pass → secure core:fail; gated `RUN_MCP_HTTP_TESTS` HTTP e2e). **BYOK** needed for the autonomous poison-following variant (llama won't chain it). |
+| M7 | L4 multi-agent | cascading injection: dispute-text payload propagates across implicitly-trusted agents → action agent auto-approves a fraudulent refund to an unowned account | supervisor rubber-stamps the fraudulent action | INTER_AGENT_AUTH (sign+verify inter-agent msgs · quarantine untrusted dispute text · supervisor provenance check) | `inter_agent_injection_propagated` ∧ `unauthorized_approval` / `supervisor_provenance_bypassed` | live (real graph; vuln core:pass → secure core:fail) |
 
 M0 = Gandalf (hosted third-party warm-up) — nothing to build.
 
@@ -82,7 +84,7 @@ M0 = Gandalf (hosted third-party warm-up) — nothing to build.
 
 ```bash
 cd /Users/kkmookhey/Projects/eiger
-uv run pytest -q                      # 136 passed, 4 skipped
+uv run pytest -q                      # 154 passed, 4 skipped
 uv run ruff check . && uv run mypy halcyon
 # Local full stack (now 5 services: web, db, ollama, mcp-core-banking, mcp-crm):
 docker compose up -d --build
@@ -107,13 +109,25 @@ Introduced **real MCP SDK servers as in-product targets** (`mcp-core-banking`, `
 - **Grading:** `mcp_poisoned_invocation` (core) / `mcp_desc_mutation_accepted` ∨ `token_read` (stretch) — all recorded host-side against the audit log, model-word-independent.
 - **Live e2e proven:** real llama3.1:8b over real HTTP MCP → vuln `core:pass` → flip → secure `core:fail`. **Caveat:** llama (keyless floor) won't *autonomously* chain the poisoned tool-description instruction; the autonomous attack reproduces with **BYOK** (M6's intended tier). Mechanism otherwise proven by deterministic tests + the gated HTTP e2e.
 
-## NEXT: M7 — multi-agent (L4)
+## M7 — multi-agent (L4) — DONE (S7)
 
-L4 multi-agent — a **LangGraph** fraud/dispute pipeline; the new surface is **cascading injection** across agents + orchestration abuse. Flag `SEC_INTER_AGENT_AUTH` (signed inter-agent messages, trust boundaries). Source of truth = `halcyon-lab-spec.md` §5 (M7) in the Blackhat workspace + `HANDOFF.md`. Reference precedent: M5 (agent+tools) and M6 (host mediation). BYOK (Day 2).
+Introduced a real **LangGraph** fraud/dispute pipeline (`intake → risk → action → supervisor`, a compiled `StateGraph`) as the new attack surface: **cascading injection** — a customer-supplied dispute-text payload propagates across implicitly-trusted agents, and the downstream action agent auto-approves a fraudulent refund to an account (`acct-attacker`) the session doesn't own. Stretch: the supervisor rubber-stamps the fraudulent action instead of catching it. Built on `s7-m7-multi-agent`; **not yet merged** — merge follows the live e2e proof (per the standing "no merge without e2e" gate).
 
-**To resume:** re-read this file + `halcyon-lab-spec.md` §5 (M7), then run the loop: brainstorm → spec → plan → subagent-driven build → opus review → e2e → merge.
+- **Guard:** `SEC_INTER_AGENT_AUTH` bundles three things — HMAC sign+verify on inter-agent messages, M3-style quarantine of untrusted customer dispute-text, and a supervisor-side provenance + `authorize_approval` ownership check.
+- **Grading:** `inter_agent_injection_propagated` ∧ `unauthorized_approval` (core) / `supervisor_provenance_bypassed` (stretch) — audit-log events, model-word-independent.
+- **Surface:** `POST /api/dispute {session_id, dispute_text, account, amount, provider?, model?, api_key?}` → `{decision, transcript}`. No new container, no compose change — an in-process pipeline reachable through the existing `web` service. `create_app` unchanged (still 7 params); reuses `Bank`/`bank_fixtures`. M1–M6 untouched.
+- Deterministic tests use stubbed `StubToolLLM` nodes on the real compiled graph — no network in the suite.
+- e2e checklist scaffolded at `docs/e2e/2026-07-18-s7-m7-multi-agent-checklist.md` (live-run fields to be filled at e2e time).
 
-**Remaining after M7:** M8 (L5 guardrails + capstone), the **Ops slice** (22-container-per-participant fleet + the 5 rehearsed `OPERATIONS.md` commands + **per-participant MCP-server isolation** + restricted DB role before the M4/M6 RCE labs + bake the embedding model into the image for offline local-LAN + trim the `uv run` re-sync at web container start), then the **module decks M2–M8**.
+## NEXT: M8 (guardrails + capstone)
+
+L5 production — the final layer, input/output guardrails + prompt firewall (`SEC_GUARDRAILS`) plus a capstone that threads the earlier modules together. Source of truth = `halcyon-lab-spec.md` (Blackhat workspace) + `HANDOFF.md`.
+
+**Before M8 starts:** merge M7 (live e2e proof, ff-merge, push both remotes, delete branch — `superpowers:finishing-a-development-branch`), update memory (`MEMORY.md`, `blackhat-build-sequence.md`).
+
+**To resume:** re-read this file + the M8 spec section, then run the loop: brainstorm → spec → plan → subagent-driven build → opus review → e2e → merge.
+
+**Remaining after M8:** the **Ops slice** (22-container-per-participant fleet + the 5 rehearsed `OPERATIONS.md` commands + **per-participant MCP-server isolation** + restricted DB role before the M4/M6 RCE labs + bake the embedding model into the image for offline local-LAN + trim the `uv run` re-sync at web container start), then the **module decks M2–M8**.
 
 ---
 
@@ -125,6 +139,7 @@ Tracked in `.superpowers/sdd/progress.md`. None block the course; revisit opport
 - **M6-specific (fast-follow, tied to per-participant MCP isolation):** the CRM rug-pull "benign-at-approval" illusion is a **process-global** `state["lists"]` counter — on a *shared* HTTP `mcp-crm` it permanently mutates after the first-ever `list_tools`, and `/reset/m6` doesn't reset it (grading stays correct in both modes; only the demo narrative degrades on a shared container). Fixes when the Ops slice gives each participant their own MCP containers, or add a per-session/reset counter hook. Also: `mcp_poisoned_invocation` attribution is deliberately coarse (any served poison arms the next sensitive core call — mechanism-based, model-word-independent); `build_*_server` carry unused `bank`/`vault` params (signature symmetry); `quarantine_description` is sentence-granular (imperfect teaching guard, like M1/M3).
 - **Small code tidies:** `config.mode` not validated against `{vulnerable,secure}` (fail-open on typo — consider raising); `pg_store` duplicates the `"module_reset"` literal + redundant `conn.commit()`; `store.append_event` can forge a `module_reset` (add a guard now that reset endpoints exist); M1 input filter + M3 injection classifier are deliberately imperfect (teaching guards, but tunable); `build_llm` `provider="remote"` hardcodes OpenAI; scanner doesn't inspect old-style `INST`/`OBJ` opcodes; `Bank.debit` unused (no funding-source account); `agent.run`'s `module` param unused (m5 hardcoded in `tools.execute`).
 - **Verification gaps:** BYOK (OpenAI/Anthropic) providers for both chat and tool-calling are wire-format-correct (claude-api-verified) but only smoke-tested with a real key at Day-2 time — do a live BYOK check when a key is available.
+- **M7-specific (minor):** `_execute_refund` records `unauthorized_approval` for a nonexistent target account (`acct-attacker`) then no-ops the credit, consistent with the same pattern in M5's `tools.py`; harmless — the mechanism-based grading is still correct.
 
 ---
 

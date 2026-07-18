@@ -6,6 +6,8 @@ The **image is the unit of change** — fix code, rebuild the image, redeploy. N
 
 > **M6 adds two MCP servers** (`mcp-core-banking`, `mcp-crm`) as their own containers, built from the same image, on the internal compose network only (no published ports). `web` reaches them via `MCP_CORE_URL`/`MCP_CRM_URL`; if those are unset the app falls back to in-process MCP (dev). `/api/mcp-agent` is **BYOK** for the real poisoning attack (send a `provider`+`api_key`); the keyless llama floor demonstrates the plumbing but won't autonomously chain the poisoned tool description. Known single-shot demo caveat: on a *shared* `mcp-crm`, the M6 rug-pull description permanently mutates after the first `list_tools` (per-participant MCP isolation resolves this — Ops slice).
 
+> **M7 adds a LangGraph dispute pipeline reachable at `POST /api/dispute`.** It runs **in-process inside the existing `web` service** — no new container, no compose change, no new port. Nothing to deploy or redeploy differently versus M1–M6.
+
 ## Deploy all (local-LAN or cloud host — same images)
     docker compose up -d --build          # 5 services: web, db, ollama, mcp-core-banking, mcp-crm
     docker compose exec ollama ollama pull llama3.1:8b   # first run only
