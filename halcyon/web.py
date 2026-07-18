@@ -12,13 +12,15 @@ from fastapi.responses import HTMLResponse
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel
 
-from halcyon import agent, bank_fixtures, guards, halo, kb_fixtures, m4_answers, rag
+from halcyon import (
+    agent, bank_fixtures, dispute_pipeline, guards, halo, kb_fixtures, m4_answers, rag,
+)
 from halcyon.bank import Bank
 from halcyon.config import Settings
 from halcyon.kb import KnowledgeBase
 from halcyon.llm import LLM, OllamaProvider, ToolLLM
 from halcyon.store import Store
-from halcyon.validators import m1, m2, m3, m4, m5, m6
+from halcyon.validators import m1, m2, m3, m4, m5, m6, m7
 
 if TYPE_CHECKING:
     from halcyon.mcp_host import MCPHost
@@ -69,6 +71,16 @@ class AgentIn(BaseModel):
     api_key: str | None = None
 
 
+class DisputeIn(BaseModel):
+    session_id: str
+    dispute_text: str
+    account: str
+    amount: int
+    provider: str | None = None
+    model: str | None = None
+    api_key: str | None = None
+
+
 _VALIDATORS = {
     "m1": m1.validate,
     "m2": m2.validate,
@@ -76,6 +88,7 @@ _VALIDATORS = {
     "m4": m4.validate,
     "m5": m5.validate,
     "m6": m6.validate,
+    "m7": m7.validate,
 }
 
 
@@ -180,6 +193,9 @@ def create_app(
         if module == "m6":
             bank.clear()
             bank.seed(bank_fixtures.seed_for(body.session_id))
+        if module == "m7":
+            bank.clear()
+            bank.seed(bank_fixtures.seed_for(body.session_id))
         return {"status": "reset", "module": module}
 
     @app.post("/api/kb")
@@ -242,6 +258,18 @@ def create_app(
                 tool_llm, body.session_id, body.message, host, store, settings
             )
         return {"reply": reply, "tool_calls": [{"name": n, "args": a} for n, a, _ in calls]}
+
+    @app.post("/api/dispute")
+    def dispute_endpoint(body: DisputeIn) -> dict:
+        tool_llm = tool_llm_factory(body.provider, body.model, body.api_key)
+        decision, transcript = dispute_pipeline.run_dispute(
+            tool_llm, body.session_id,
+            {"account": body.account, "amount": body.amount, "dispute_text": body.dispute_text},
+            bank, store, settings)
+        return {
+            "decision": decision,
+            "transcript": [{"from": m["signer"], "content": m["content"]} for m in transcript],
+        }
 
     @app.post("/submit/m4")
     def submit_m4(body: SubmitIn) -> dict:
