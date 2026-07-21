@@ -13,14 +13,14 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel
 
 from halcyon import (
-    agent, bank_fixtures, dispute_pipeline, guards, halo, kb_fixtures, m4_answers, rag,
+    agent, bank_fixtures, capstone, dispute_pipeline, guards, halo, kb_fixtures, m4_answers, rag,
 )
 from halcyon.bank import Bank
 from halcyon.config import Settings
 from halcyon.kb import KnowledgeBase
 from halcyon.llm import LLM, OllamaProvider, ToolLLM
 from halcyon.store import Store
-from halcyon.validators import m1, m2, m3, m4, m5, m6, m7
+from halcyon.validators import m1, m2, m3, m4, m5, m6, m7, m8
 
 if TYPE_CHECKING:
     from halcyon.mcp_host import MCPHost
@@ -89,6 +89,7 @@ _VALIDATORS = {
     "m5": m5.validate,
     "m6": m6.validate,
     "m7": m7.validate,
+    "m8": m8.validate,
 }
 
 
@@ -270,6 +271,16 @@ def create_app(
             "decision": decision,
             "transcript": [{"from": m["signer"], "content": m["content"]} for m in transcript],
         }
+
+    @app.post("/api/guarded-chat")
+    def guarded_chat(body: ChatIn) -> dict:
+        llm = llm_factory(body.provider, body.model, body.api_key)
+        reply = halo.guarded_turn(store, llm, settings, body.session_id, body.message)
+        return {"reply": reply}
+
+    @app.get("/capstone")
+    def capstone_view(session: str) -> dict:
+        return capstone.residual_risk(store, session)
 
     @app.post("/submit/m4")
     def submit_m4(body: SubmitIn) -> dict:
