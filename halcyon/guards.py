@@ -3,6 +3,7 @@ import hmac
 import html
 import json
 import re
+import unicodedata
 
 from halcyon.bank import Bank
 from halcyon.config import Settings
@@ -178,3 +179,29 @@ def authorize_approval(session_id: str, to_account: str, bank: Bank, settings: S
     if not settings.sec_inter_agent_auth:
         return True
     return bank.owns(session_id, to_account)
+
+
+_LEET = str.maketrans({"4": "a", "3": "e", "0": "o", "1": "i", "5": "s",
+                       "7": "t", "@": "a", "$": "s", "!": "i"})
+_ZERO_WIDTH = dict.fromkeys([0x200b, 0x200c, 0x200d, 0xfeff, 0x2060], None)
+
+_GUARDRAIL_PATTERNS = [
+    r"ignore (all )?(previous|prior|above)",
+    r"(reveal|print|show|repeat|leak).{0,25}(system )?(prompt|instructions|token)",
+    r"system prompt",
+    r"operator token|internal token|honeytoken",
+    r"you are now|pretend|role[- ]?play",
+]
+
+
+def canonicalize(text: str) -> str:
+    t = unicodedata.normalize("NFKC", text)
+    t = t.translate(_ZERO_WIDTH)
+    t = t.translate(_LEET)
+    t = re.sub(r"\s+", " ", t)
+    return t.strip().lower()
+
+
+def guardrail_blocklist_hit(text: str) -> bool:
+    t = text.lower()
+    return any(re.search(p, t) for p in _GUARDRAIL_PATTERNS)
