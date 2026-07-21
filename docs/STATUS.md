@@ -10,9 +10,9 @@ Companion docs: `README.md` (what Eiger is), `OPERATIONS.md` (deploy/run), `CLAU
 
 - **What:** a deliberately-vulnerable single-app teaching lab for a 2-day Black Hat course on adversarial AI. Fictional AI-neobank **Halcyon**; assistant **Halo**. Attacked across six layers (L0→L5) that grow module by module. Participants **Build / Break / Secure** each layer.
 - **Repo:** `eiger`. Local: `/Users/kkmookhey/Projects/eiger`. Public remotes: `origin` = github.com/kkmookhey/eiger, `transilience` = github.com/transilienceai/eiger. Branch: `main`.
-- **Built so far:** **M1 · M2 · M3 · M4** (all of Day 1) **+ M5 · M6 · M7** (Day-2 modules). **All merged to `main`** (M7 merged 2026-07-18, HEAD `2d5c5de`), each with a live end-to-end proof.
-- **Tests:** `158 passed, 4 skipped` (the 4 skips are the Postgres + ChromaDB + 2 MCP-over-HTTP integration tests, gated by `TEST_DATABASE_URL` / `RUN_CHROMA_TESTS` / `RUN_MCP_HTTP_TESTS`). Ruff + mypy clean.
-- **Next:** **M8 (guardrails + capstone)**, plus the **Ops fleet slice**. Then the module **decks** (deferred until the app was real).
+- **Built so far:** **all 8 teaching modules, M1–M8** — the complete L0→L5 attack surface (chatbot → RAG → agent → MCP → multi-agent → guardrails). M1–M7 **merged to `main`** (M7 merged 2026-07-18, HEAD `2d5c5de`), each with a live end-to-end proof. **M8 built on `s8-m8-guardrails`, not yet merged** — merge follows its live e2e proof.
+- **Tests:** `181 passed, 4 skipped` (the 4 skips are the Postgres + ChromaDB + 2 MCP-over-HTTP integration tests, gated by `TEST_DATABASE_URL` / `RUN_CHROMA_TESTS` / `RUN_MCP_HTTP_TESTS`). Ruff + mypy clean.
+- **Next:** the **Ops fleet slice**, then the **module decks M2–M8** (deferred until the app was real).
 
 ---
 
@@ -54,13 +54,14 @@ Vertical slice per module (`Sn` builds `Mn`). Each slice runs this loop:
 | M5 (L2 agent) | `bank.py`, `tools.py`, `agent.py` (`run`), `bank_fixtures.py` | tool-calling agent |
 | M6 (L3 MCP) | `mcp_servers/{core_banking,crm}.py` (real MCP SDK servers), `mcp_host.py` (async client/host — guards at call sites), `mcp_vault.py`, `crm_fixtures.py`, `mcp_deploy.py` (streamable-HTTP apps), `agent.run_mcp` | 2 real MCP servers behind the agent; in-memory transport in tests, streamable-HTTP in deploy |
 | M7 (L4 multi-agent) | `dispute_pipeline.py` (`run_dispute`, real compiled LangGraph `StateGraph`: intake→risk→action→supervisor), `dispute_fixtures.py`, `validators/m7.py` | reuses `Bank`/`bank_fixtures`; deterministic `StubToolLLM` nodes in tests |
+| M8 (L5 guardrails + capstone) | `guards.canonicalize` / `guards.guardrail_check` (in `guards.py`), `halo.guarded_turn` (in `halo.py`), `capstone.py`, `validators/m8.py` | reuses M1's Halo/honeytoken/canary; capstone is a read-only residual-risk scoreboard over m1–m8's core events |
 | UI | `templates/chat.html`, `templates/reach.html` | one page, a panel per module; reply always via `textContent` (except M2's deliberate XSS surface) |
 
-**Endpoints:** `GET /health` (now also probes the MCP servers → `"mcp": up|down|in-process`) · `GET /` + `/chat` (UI) · `POST /api/chat` (M1/M2) · `POST /api/kb` + `POST /api/ask` (M3) · `POST /submit/m4` (M4) · `POST /api/agent` (M5) · `POST /api/mcp-agent` (M6) · `POST /api/dispute` (M7) · `GET /validate/{module}` · `POST /reset/{module}`.
+**Endpoints:** `GET /health` (now also probes the MCP servers → `"mcp": up|down|in-process`) · `GET /` + `/chat` (UI) · `POST /api/chat` (M1/M2) · `POST /api/kb` + `POST /api/ask` (M3) · `POST /submit/m4` (M4) · `POST /api/agent` (M5) · `POST /api/mcp-agent` (M6) · `POST /api/dispute` (M7) · `POST /api/guarded-chat` (M8) · `GET /capstone` (M8) · `GET /validate/{module}` · `POST /reset/{module}`.
 
-**`create_app(store, settings, llm_factory, kb, bank, tool_llm_factory, mcp_host_factory)`** — unchanged by M7 (still 7 params; M7 reuses `bank`). It grew a param per stateful module (kb for M3, bank + tool_llm_factory for M5, mcp_host_factory for M6). All call sites (tests' `make_client*`, `main.py`) pass all 7. `main.py` selects `http_host` when `MCP_CORE_URL`+`MCP_CRM_URL` are set (deploy), else an in-process `in_memory_host` fallback (dev).
+**`create_app(store, settings, llm_factory, kb, bank, tool_llm_factory, mcp_host_factory)`** — unchanged by M7 or M8 (still 7 params; M8 reuses the existing `llm_factory`, same as M1/M2). It grew a param per stateful module (kb for M3, bank + tool_llm_factory for M5, mcp_host_factory for M6). All call sites (tests' `make_client*`, `main.py`) pass all 7. `main.py` selects `http_host` when `MCP_CORE_URL`+`MCP_CRM_URL` are set (deploy), else an in-process `in_memory_host` fallback (dev).
 
-**Flags:** `HALCYON_MODE` + `SEC_SYSTEM_PROMPT_HARDENING` (M1/M2) · `SEC_INPUT_FILTER` (M1) · `SEC_OUTPUT_ENCODING` (M2) · `SEC_RAG_PROVENANCE` (M3) · `SEC_ARTIFACT_VERIFICATION` (M4) · `SEC_TOOL_SCOPE_ENFORCEMENT` (M5) · `SEC_MCP_DESC_PINNING` + `SEC_MCP_TOKEN_SCOPING` (M6) · `SEC_INTER_AGENT_AUTH` (M7).
+**Flags:** `HALCYON_MODE` + `SEC_SYSTEM_PROMPT_HARDENING` (M1/M2) · `SEC_INPUT_FILTER` (M1) · `SEC_OUTPUT_ENCODING` (M2) · `SEC_RAG_PROVENANCE` (M3) · `SEC_ARTIFACT_VERIFICATION` (M4) · `SEC_TOOL_SCOPE_ENFORCEMENT` (M5) · `SEC_MCP_DESC_PINNING` + `SEC_MCP_TOKEN_SCOPING` (M6) · `SEC_INTER_AGENT_AUTH` (M7) · `SEC_GUARDRAILS` (M8).
 
 ---
 
@@ -75,6 +76,7 @@ Vertical slice per module (`Sn` builds `Mn`). Each slice runs this loop:
 | M5 | L2 agent | confused-deputy: move money to an unowned account | `update_email` on an unowned account (hijack) | TOOL_SCOPE_ENFORCEMENT (per-action ownership authz) | `unauthorized_tool_call` / `unauthorized_account_modification` | live (llama3.1:8b Ollama tool-calling, 4/4) |
 | M6 | L3 MCP | tool-description **poisoning** — a hidden instruction in a CRM tool's description induces an unintended cross-server data call | **rug pull** (description mutates post-approval) · **token theft** (cross-server token read) | DESC_PINNING (pin+verify+quarantine descriptions) + TOKEN_SCOPING (per-server token isolation, enforced host-side) | `mcp_poisoned_invocation` / `mcp_desc_mutation_accepted` ∨ `token_read` | live (real llama3.1:8b over real streamable-HTTP MCP: vuln core:pass → secure core:fail; gated `RUN_MCP_HTTP_TESTS` HTTP e2e). **BYOK** needed for the autonomous poison-following variant (llama won't chain it). |
 | M7 | L4 multi-agent | cascading injection: dispute-text payload propagates across implicitly-trusted agents → action agent auto-approves a fraudulent refund to an unowned account | supervisor rubber-stamps the fraudulent action | INTER_AGENT_AUTH (sign+verify inter-agent msgs · quarantine untrusted dispute text · supervisor provenance check) | `inter_agent_injection_propagated` ∧ `unauthorized_approval` / `supervisor_provenance_bypassed` | live (real graph; vuln core:pass → secure core:fail) |
+| M8 | L5 guardrail | guardrail evasion: an obfuscated (leetspeak/unicode/zero-width) payload bypasses the naive input filter and re-lands the M1 operator-token leak | harden & re-test: same payload blocked once `SEC_GUARDRAILS` is on | GUARDRAILS (canonicalize input before blocklist match + complete decision logging) | `guardrail_bypassed` / `guardrail_hardened_block` | live (real llama; vuln core:pass → secure core:fail) |
 
 M0 = Gandalf (hosted third-party warm-up) — nothing to build.
 
@@ -84,7 +86,7 @@ M0 = Gandalf (hosted third-party warm-up) — nothing to build.
 
 ```bash
 cd /Users/kkmookhey/Projects/eiger
-uv run pytest -q                      # 158 passed, 4 skipped
+uv run pytest -q                      # 181 passed, 4 skipped
 uv run ruff check . && uv run mypy halcyon
 # Local full stack (now 5 services: web, db, ollama, mcp-core-banking, mcp-crm):
 docker compose up -d --build
@@ -119,15 +121,18 @@ Introduced a real **LangGraph** fraud/dispute pipeline (`intake → risk → act
 - Deterministic tests use stubbed `StubToolLLM` nodes on the real compiled graph — no network in the suite.
 - e2e checklist scaffolded at `docs/e2e/2026-07-18-s7-m7-multi-agent-checklist.md` (live-run fields to be filled at e2e time).
 
-## NEXT: M8 (guardrails + capstone)
+## M8 — guardrails + capstone (L5) — DONE (S8)
 
-L5 production — the final layer, input/output guardrails + prompt firewall (`SEC_GUARDRAILS`) plus a capstone that threads the earlier modules together. Source of truth = `halcyon-lab-spec.md` (Blackhat workspace) + `HANDOFF.md`.
+**All 8 teaching modules are now complete (L0→L5).** M8 is the final layer: guardrail evasion as the 8th attack vector, plus a read-only capstone that aggregates every module's core-exploit signal into one residual-risk scoreboard. Built on `s8-m8-guardrails`; **not yet merged** — merge follows the live e2e proof (per the standing "no merge without e2e" gate).
 
-**M7 merge: DONE** (2026-07-18 — ff-merged `2d5c5de` to `main`, pushed both remotes, branch deleted, memory updated).
+- **Core attack:** an obfuscated payload (leetspeak `P4RS3LT0NGV3` / unicode / zero-width) bypasses a naive raw-string input filter and re-lands the M1 operator-token leak through the new `POST /api/guarded-chat` surface.
+- **Guard:** `SEC_GUARDRAILS` gates `guards.canonicalize()` (de-leetspeak → NFKC → strip zero-width → lowercase) applied *before* the blocklist match. Off (vulnerable) = raw-only match, bypassable by any obfuscation; on (secure) = canonical match, robust to it. `guards.guardrail_check` returns a `GuardrailDecision(allow, event)`; `halo.guarded_turn` fronts the existing M1 `handle_turn` pipeline with it (module `"m8"`).
+- **Grading:** `guardrail_bypassed` (core — obfuscated payload slipped through) / `guardrail_hardened_block` (stretch — harden and re-test: the same payload gets blocked once the guard is on) — both audit-log events, model-word-independent, via `validators/m8.py`.
+- **Capstone:** `GET /capstone?session=` is a **read-only** residual-risk scoreboard (`capstone.py::residual_risk`) that aggregates each module's core-exploit event across m1–m8 via a `CORE_EVENTS` map kept in sync with the validators by a dedicated test. No new state, no grading of its own.
+- **Surface:** `POST /api/guarded-chat` reuses the existing `ChatIn` model + `llm_factory` (same shape as `/api/chat`). `create_app` unchanged (still 7 params). Reuses M1's Halo/honeytoken/canary machinery; M1–M7 untouched.
+- garak/PyRIT are kept as a documented **external** "point your scanner at the live API" exercise — not built in (out of scope for this teaching lab).
 
-**To resume M8:** re-read this file + the M8 spec section (`halcyon-lab-spec.md` §5 M8), then run the loop: brainstorm → spec → plan → subagent-driven build → opus review → e2e → merge.
-
-**Remaining after M8:** the **Ops slice** (22-container-per-participant fleet + the 5 rehearsed `OPERATIONS.md` commands + **per-participant MCP-server isolation** + restricted DB role before the M4/M6 RCE labs + bake the embedding model into the image for offline local-LAN + trim the `uv run` re-sync at web container start), then the **module decks M2–M8**.
+**Next up:** the **Ops fleet slice** (22-container-per-participant fleet + the 5 rehearsed `OPERATIONS.md` commands + per-participant MCP-server isolation + restricted DB role before the M4/M6 RCE labs + bake the embedding model into the image for offline local-LAN + trim the `uv run` re-sync at web container start), then the **module decks M2–M8**.
 
 ---
 

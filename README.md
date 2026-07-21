@@ -21,7 +21,7 @@ Participants **Build / Break / Secure** each layer. Named for the Eiger's north 
 
 ## Status
 
-**M1–M7 built and merged** — 154 tests, each proven live end-to-end. Next: M8 (guardrails + capstone).
+**M1–M8 all built and merged — the full L0→L5 attack surface (chatbot → RAG → agent → MCP → multi-agent → guardrails). Next: the Ops fleet slice, then the module decks.**
 
 👉 **[`docs/STATUS.md`](docs/STATUS.md) is the single source of truth for build status and how to resume.** It covers the architecture, the per-module summary, how to run/test/deploy, the M6 starting point, and deferred cleanups.
 

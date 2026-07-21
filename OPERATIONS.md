@@ -8,6 +8,8 @@ The **image is the unit of change** — fix code, rebuild the image, redeploy. N
 
 > **M7 adds a LangGraph dispute pipeline reachable at `POST /api/dispute`.** It runs **in-process inside the existing `web` service** — no new container, no compose change, no new port. Nothing to deploy or redeploy differently versus M1–M6.
 
+> **M8 adds `POST /api/guarded-chat`** (the guardrail-fronted chatbot) **and `GET /capstone`** (a read-only residual-risk scoreboard aggregating each module's core-exploit event across m1–m8). Both run **in-process inside the existing `web` service** — no new container, no compose change, no new port. Nothing to deploy or redeploy differently versus M1–M7.
+
 ## Deploy all (local-LAN or cloud host — same images)
     docker compose up -d --build          # 5 services: web, db, ollama, mcp-core-banking, mcp-crm
     docker compose exec ollama ollama pull llama3.1:8b   # first run only
