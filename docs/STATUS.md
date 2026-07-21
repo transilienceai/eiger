@@ -10,7 +10,7 @@ Companion docs: `README.md` (what Eiger is), `OPERATIONS.md` (deploy/run), `CLAU
 
 - **What:** a deliberately-vulnerable single-app teaching lab for a 2-day Black Hat course on adversarial AI. Fictional AI-neobank **Halcyon**; assistant **Halo**. Attacked across six layers (L0→L5) that grow module by module. Participants **Build / Break / Secure** each layer.
 - **Repo:** `eiger`. Local: `/Users/kkmookhey/Projects/eiger`. Public remotes: `origin` = github.com/kkmookhey/eiger, `transilience` = github.com/transilienceai/eiger. Branch: `main`.
-- **Built so far:** **all 8 teaching modules, M1–M8** — the complete L0→L5 attack surface (chatbot → RAG → agent → MCP → multi-agent → guardrails). M1–M7 **merged to `main`** (M7 merged 2026-07-18, HEAD `2d5c5de`), each with a live end-to-end proof. **M8 built on `s8-m8-guardrails`, not yet merged** — merge follows its live e2e proof.
+- **Built so far:** **all 8 teaching modules, M1–M8 — ALL merged to `main`** (M8 merged 2026-07-18, HEAD `282dce8`). The complete L0→L5 attack surface (chatbot → RAG → agent → MCP → multi-agent → guardrails), each with a live end-to-end proof. **The teaching curriculum is code-complete.**
 - **Tests:** `181 passed, 4 skipped` (the 4 skips are the Postgres + ChromaDB + 2 MCP-over-HTTP integration tests, gated by `TEST_DATABASE_URL` / `RUN_CHROMA_TESTS` / `RUN_MCP_HTTP_TESTS`). Ruff + mypy clean.
 - **Next:** the **Ops fleet slice**, then the **module decks M2–M8** (deferred until the app was real).
 
@@ -113,7 +113,7 @@ Introduced **real MCP SDK servers as in-product targets** (`mcp-core-banking`, `
 
 ## M7 — multi-agent (L4) — DONE (S7)
 
-Introduced a real **LangGraph** fraud/dispute pipeline (`intake → risk → action → supervisor`, a compiled `StateGraph`) as the new attack surface: **cascading injection** — a customer-supplied dispute-text payload propagates across implicitly-trusted agents, and the downstream action agent auto-approves a fraudulent refund to an account (`acct-attacker`) the session doesn't own. Stretch: the supervisor rubber-stamps the fraudulent action instead of catching it. Built on `s7-m7-multi-agent`; **not yet merged** — merge follows the live e2e proof (per the standing "no merge without e2e" gate).
+Introduced a real **LangGraph** fraud/dispute pipeline (`intake → risk → action → supervisor`, a compiled `StateGraph`) as the new attack surface: **cascading injection** — a customer-supplied dispute-text payload propagates across implicitly-trusted agents, and the downstream action agent auto-approves a fraudulent refund to an account (`acct-attacker`) the session doesn't own. Stretch: the supervisor rubber-stamps the fraudulent action instead of catching it. **Merged to `main`** (2026-07-18, `2d5c5de`); live e2e proven both directions (vuln core:pass → secure core:fail, autonomous with keyless llama).
 
 - **Guard:** `SEC_INTER_AGENT_AUTH` bundles three things — HMAC sign+verify on inter-agent messages, M3-style quarantine of untrusted customer dispute-text, and a supervisor-side provenance + `authorize_approval` ownership check.
 - **Grading:** `inter_agent_injection_propagated` ∧ `unauthorized_approval` (core) / `supervisor_provenance_bypassed` (stretch) — audit-log events, model-word-independent.
@@ -123,7 +123,7 @@ Introduced a real **LangGraph** fraud/dispute pipeline (`intake → risk → act
 
 ## M8 — guardrails + capstone (L5) — DONE (S8)
 
-**All 8 teaching modules are now complete (L0→L5).** M8 is the final layer: guardrail evasion as the 8th attack vector, plus a read-only capstone that aggregates every module's core-exploit signal into one residual-risk scoreboard. Built on `s8-m8-guardrails`; **not yet merged** — merge follows the live e2e proof (per the standing "no merge without e2e" gate).
+**All 8 teaching modules are now complete (L0→L5).** M8 is the final layer: guardrail evasion as the 8th attack vector, plus a read-only capstone that aggregates every module's core-exploit signal into one residual-risk scoreboard. **Merged to `main`** (2026-07-18, `282dce8`); live e2e proven both directions (vuln core:pass → secure core:fail on an identical leetspeak payload; guardrail grading is deterministic/model-independent).
 
 - **Core attack:** an obfuscated payload (leetspeak `P4RS3LT0NGV3` / unicode / zero-width) bypasses a naive raw-string input filter and re-lands the M1 operator-token leak through the new `POST /api/guarded-chat` surface.
 - **Guard:** `SEC_GUARDRAILS` gates `guards.canonicalize()` (de-leetspeak → NFKC → strip zero-width → lowercase) applied *before* the blocklist match. Off (vulnerable) = raw-only match, bypassable by any obfuscation; on (secure) = canonical match, robust to it. `guards.guardrail_check` returns a `GuardrailDecision(allow, event)`; `halo.guarded_turn` fronts the existing M1 `handle_turn` pipeline with it (module `"m8"`).
