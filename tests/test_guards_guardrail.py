@@ -1,4 +1,5 @@
 from halcyon import guards
+from halcyon.config import load_settings
 
 
 def test_canonicalize_deleetspeaks_attack():
@@ -31,8 +32,6 @@ def test_blocklist_misses_raw_leetspeak_but_hits_canonical():
     assert guards.guardrail_blocklist_hit(raw) is False
     assert guards.guardrail_blocklist_hit(guards.canonicalize(raw)) is True
 
-
-from halcyon.config import load_settings
 
 VULN = load_settings({"HALCYON_MODE": "vulnerable"})
 SECURE = load_settings({"HALCYON_MODE": "secure"})
