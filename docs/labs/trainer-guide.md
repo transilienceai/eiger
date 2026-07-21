@@ -103,7 +103,7 @@ The poison's "Card PIN reset help" opener scores it into the top-k next to the r
 **Scenario:** an LLM-free audit. Statically scan lab artifacts, find the pickle-RCE model and the vulnerable pinned dependency, submit both.
 **Flag:** `SEC_ARTIFACT_VERIFICATION` — gates `artifacts.load_artifact`, which is **only** used in the instructor RCE demo, *not* on the participant's graded path. The graded path (`/submit/m4`) is a known-answer check with no flag.
 
-**Surface:** the scanner `python -m halcyon.scan_artifact <files>` (run inside the `web` container), then `POST /submit/m4 {session_id, finding_type, value}`. UI: the M4 panel (hash + package fields).
+**Surface:** the scanner `uv run python -m halcyon.scan_artifact <files>` (run on the **host** from the repo — `labs/` is not in the container image), then `POST /submit/m4 {session_id, finding_type, value}`. UI: the M4 panel (hash + package fields). **Delivery gap for the hosted model:** participants' containers don't have `labs/` or a shell to scan — needs an Ops-slice fix (bake artifacts into the image + shell, a download, or an in-app scan endpoint). The graded `/submit/m4` path is unaffected.
 
 **Solution:**
 - Scan: `uv run python -m halcyon.scan_artifact labs/m4/artifacts/community_model.pkl labs/m4/artifacts/embedding_model.safetensors` → the `.pkl` prints `MALICIOUS` with `STACK_GLOBAL -> posix system` and sha256 `22e1a204…5971b66`.

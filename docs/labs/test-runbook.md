@@ -91,8 +91,9 @@ v m3 t-m3      # stretch now pass
 
 ```bash
 curl -s -XPOST localhost:8000/reset/m4 -H content-type:application/json -d '{"session_id":"t-m4"}' >/dev/null
-# scan the artifacts (participant would run this to FIND the hash):
-docker compose exec web uv run python -m halcyon.scan_artifact \
+# scan the artifacts to FIND the hash — run on the HOST from the repo dir
+# (the artifacts live in labs/ which is NOT copied into the web image; see note below):
+uv run python -m halcyon.scan_artifact \
   labs/m4/artifacts/community_model.pkl labs/m4/artifacts/embedding_model.safetensors
 # submit the poisoned-artifact sha256 (core) and the vulnerable package (stretch):
 curl -s -XPOST localhost:8000/submit/m4 -H content-type:application/json \
@@ -102,6 +103,8 @@ curl -s -XPOST localhost:8000/submit/m4 -H content-type:application/json \
 v m4 t-m4
 ```
 **Expect:** both submits `{"correct":true}`; `{"core":"pass","stretch":"pass"}`. The scanner prints `MALICIOUS` for the `.pkl` with `STACK_GLOBAL -> posix system`.
+
+> **⚠️ M4 delivery gap (Ops-slice item):** the `labs/` artifacts are **not** in the `web` container image (`Dockerfile` copies only `halcyon/`), so the scanner runs on the host repo — fine for your local testing, but **participants in a hosted container-per-participant instance can't run it as-is.** Before the conference, M4 delivery needs one of: bake `labs/` into the image + give shell access, ship the artifacts as a download, or add an in-app scan endpoint. Tracked in STATUS "Deferred cleanups." The graded `/submit/m4` path works regardless (known-answer check).
 
 ### M5 — agent confused-deputy (refund to an unowned account) · *keyless, reliable*
 
