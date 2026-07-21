@@ -19,6 +19,8 @@ TOKEN_READ = "token_read"
 INTER_AGENT_INJECTION_PROPAGATED = "inter_agent_injection_propagated"
 UNAUTHORIZED_APPROVAL = "unauthorized_approval"
 SUPERVISOR_PROVENANCE_BYPASSED = "supervisor_provenance_bypassed"
+GUARDRAIL_BYPASSED = "guardrail_bypassed"
+GUARDRAIL_HARDENED_BLOCK = "guardrail_hardened_block"
 
 
 def record(

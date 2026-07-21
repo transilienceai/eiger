@@ -77,3 +77,12 @@ def test_inter_agent_auth_flag_defaults_to_mode():
     assert load_settings(
         {"HALCYON_MODE": "vulnerable", "SEC_INTER_AGENT_AUTH": "on"}
     ).sec_inter_agent_auth is True
+
+
+def test_guardrails_flag_defaults_to_mode():
+    from halcyon.config import load_settings
+    assert load_settings({"HALCYON_MODE": "secure"}).sec_guardrails is True
+    assert load_settings({"HALCYON_MODE": "vulnerable"}).sec_guardrails is False
+    assert load_settings(
+        {"HALCYON_MODE": "vulnerable", "SEC_GUARDRAILS": "on"}
+    ).sec_guardrails is True
