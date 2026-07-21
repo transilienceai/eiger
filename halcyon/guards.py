@@ -4,6 +4,7 @@ import html
 import json
 import re
 import unicodedata
+from dataclasses import dataclass
 
 from halcyon.bank import Bank
 from halcyon.config import Settings
@@ -205,3 +206,25 @@ def canonicalize(text: str) -> str:
 def guardrail_blocklist_hit(text: str) -> bool:
     t = text.lower()
     return any(re.search(p, t) for p in _GUARDRAIL_PATTERNS)
+
+
+@dataclass(frozen=True)
+class GuardrailDecision:
+    allow: bool
+    event: str | None
+
+
+def guardrail_check(message: str, settings: Settings) -> GuardrailDecision:
+    raw = guardrail_blocklist_hit(message)
+    canon = guardrail_blocklist_hit(canonicalize(message))
+    if settings.sec_guardrails:
+        # hardened: match on the canonical form, so obfuscation can't hide the payload
+        if canon:
+            return GuardrailDecision(allow=False, event="hardened_block")
+        return GuardrailDecision(allow=True, event=None)
+    # vulnerable: naive raw-only match
+    if raw:
+        return GuardrailDecision(allow=False, event=None)  # blocks un-obfuscated attacks
+    if canon:
+        return GuardrailDecision(allow=True, event="bypassed")  # obfuscated payload slipped through
+    return GuardrailDecision(allow=True, event=None)
