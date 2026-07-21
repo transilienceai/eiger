@@ -26,3 +26,22 @@ def handle_turn(
         return LLM_ERROR
     canary.scan_and_record(store, session_id, module, reply, actor=session_id)
     return reply
+
+
+def guarded_turn(
+    store: Store,
+    llm: LLM,
+    settings: Settings,
+    session_id: str,
+    message: str,
+) -> str:
+    decision = guards.guardrail_check(message, settings)
+    if decision.event == "bypassed":
+        audit.record(store, session_id, "m8", audit.GUARDRAIL_BYPASSED, session_id,
+                     {"message": message})
+    elif decision.event == "hardened_block":
+        audit.record(store, session_id, "m8", audit.GUARDRAIL_HARDENED_BLOCK, session_id,
+                     {"message": message})
+    if not decision.allow:
+        return REFUSAL
+    return handle_turn(store, llm, settings, session_id, message, module="m8")
