@@ -24,6 +24,13 @@ GUARDRAIL_BYPASSED = "guardrail_bypassed"
 GUARDRAIL_HARDENED_BLOCK = "guardrail_hardened_block"
 GUARDRAIL_DECISION = "guardrail_decision"
 
+# S10 kill-chain capstone (module "chain") — ordered exploit events
+SECRET_LEAK_DISCOVERED = "secret_leak_discovered"
+MISCONFIG_EXPLOITED = "misconfig_exploited"
+TRUSTED_INJECTION_FIRED = "trusted_injection_fired"
+MALICIOUS_ARTIFACT_LOADED = "malicious_artifact_loaded"
+RCE_CONFIRMED = "rce_confirmed"
+
 
 def record(
     store: Store,
