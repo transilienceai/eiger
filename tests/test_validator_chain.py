@@ -74,6 +74,25 @@ def test_stored_pass_survives_a_later_failing_revalidate():
     assert progress.read(store, "p1", "chain") == (True, False)  # ...but the stored pass stands
 
 
+def test_reset_then_failed_full_replay_clears_pass():
+    # Subtler than the empty-window reset case: after a reset, a
+    # participant may legitimately replay the *entire* chain again and
+    # still fail (e.g. wrong secret). All five stage types recur, but the
+    # pass-marker from before the reset does not survive it -- the stored
+    # pass must not be treated as still valid just because the stages are
+    # present again.
+    store = InMemoryStore()
+    _full_in_order(store, secret="VAULT")
+    assert chain.validate(store, "p1", "VAULT")["core"] == "pass"
+    assert progress.read(store, "p1", "chain") == (True, False)
+
+    store.write_reset_marker("p1", "chain")
+    _full_in_order(store, secret="WRONG-SECRET")  # legitimate post-reset replay, fails
+    r = chain.validate(store, "p1", "VAULT")
+    assert r["core"] == "fail"
+    assert progress.read(store, "p1", "chain") == (False, False)
+
+
 def test_re_reading_an_earlier_stage_after_finishing_does_not_lose_the_pass():
     # First-occurrence semantics: a participant who re-triggers an earlier
     # stage (e.g. re-reads the leaked secret blob) after already completing

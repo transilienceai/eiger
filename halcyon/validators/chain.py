@@ -28,16 +28,19 @@ def validate(store: Store, session_id: str, vault_master: str) -> dict:
         for e in events
     )
     core = in_order and secret_ok
+    marker_already_recorded = any(e.event_type == audit.CHAIN_CORE_PASSED for e in events)
 
-    # A stored pass is a historical fact; only an explicit reset retracts it.
-    # `events_since_reset` already drops everything before the latest
-    # `module_reset` marker, so if the events that earned a prior pass are
-    # still all here (`all_present`), no reset has intervened since — this
-    # call's `core=False` is just a stale observation (e.g. a redeploy
-    # minted a new vault secret) and must not overwrite the stored pass.
-    stored_core, _ = progress.read(store, session_id, MODULE)
-    downgrading_without_reset = not core and stored_core and all_present
-    if not downgrading_without_reset:
-        progress.mark(store, session_id, MODULE, core, False)
+    # A pass is a durable fact once earned: record it as an audit-log event
+    # (once per reset-epoch) so a later stale observation -- e.g. a redeploy
+    # rotates vault_master, so `secret_ok` goes False on the very same
+    # events -- can't erase it. A genuine module_reset drops every event
+    # before it, including this marker, from `events_since_reset`, so a
+    # reset still retracts the pass with no extra bookkeeping, and a
+    # post-reset replay is judged purely on what happened after the reset.
+    # This keeps grading a pure query over the append-only audit log.
+    if core and not marker_already_recorded:
+        audit.record(store, session_id, MODULE, audit.CHAIN_CORE_PASSED, session_id)
+    durable_core = core or marker_already_recorded
 
+    progress.mark(store, session_id, MODULE, durable_core, False)
     return {"core": "pass" if core else "fail", "stages": stages}
