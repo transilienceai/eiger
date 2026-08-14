@@ -57,7 +57,10 @@ def run_ops_agent(
         if isinstance(step, FinalAnswer):
             return step.text, calls
         assert isinstance(step, ToolCall)
-        result = _run_deploy(session_id, session, authoritative, worker, store, settings)
+        if step.name == "deploy":
+            result = _run_deploy(session_id, session, authoritative, worker, store, settings)
+        else:
+            result = f"unknown tool: {step.name}"
         calls.append((step.name, step.args, result))
         cid = f"call_{i}"
         messages.append({"role": "assistant", "tool_calls": [
