@@ -28,5 +28,16 @@ def validate(store: Store, session_id: str, vault_master: str) -> dict:
         for e in events
     )
     core = in_order and secret_ok
-    progress.mark(store, session_id, MODULE, core, False)
+
+    # A stored pass is a historical fact; only an explicit reset retracts it.
+    # `events_since_reset` already drops everything before the latest
+    # `module_reset` marker, so if the events that earned a prior pass are
+    # still all here (`all_present`), no reset has intervened since — this
+    # call's `core=False` is just a stale observation (e.g. a redeploy
+    # minted a new vault secret) and must not overwrite the stored pass.
+    stored_core, _ = progress.read(store, session_id, MODULE)
+    downgrading_without_reset = not core and stored_core and all_present
+    if not downgrading_without_reset:
+        progress.mark(store, session_id, MODULE, core, False)
+
     return {"core": "pass" if core else "fail", "stages": stages}
