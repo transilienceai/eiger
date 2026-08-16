@@ -8,6 +8,32 @@ L0 chatbot → L1 RAG → L2 agent → L3 MCP servers → L4 multi-agent → L5 
 
 Participants **Build / Break / Secure** each layer. Named for the Eiger's north face — the hard, exposed climb.
 
+---
+
+## ⚠️ Read this before you run it
+
+**Eiger is deliberately vulnerable software. It exists to be attacked. It is not a product, and it is not safe to deploy.**
+
+Every module ships real, working vulnerabilities on purpose — prompt injection, stored XSS, an agent tool layer that moves money with no authorization, RAG knowledge-base poisoning, MCP tool-description poisoning, unsafe pickle deserialization leading to remote code execution, a pinned dependency with a known critical CVE, and guardrail bypasses. **Some modules execute attacker-supplied code by design.** The `secure` flags demonstrate the fixes; they do not make the lab safe to expose.
+
+Treat any Eiger instance as already compromised, and act accordingly:
+
+- **Never run it on a host, network, or cloud account you care about.** Assume anyone who can reach it can execute code in its container and read anything that container can read.
+- **Isolate it.** Throwaway host or dedicated cloud project, one container per participant, no route to production networks or internal services, and block the cloud metadata endpoint (`169.254.169.254`).
+- **Never give it real credentials or real data.** Every fixture in this repo is synthetic and must stay that way. If you supply your own model API key (BYOK), use a disposable key with a spend cap and revoke it when the session ends.
+- **Do not expose it to the public internet** for longer than a teaching session needs, and never without per-participant isolation.
+- **Do not reuse this code in production.** Copying a pattern out of here into a real system will reproduce the vulnerability — that is what the pattern is for.
+
+You are responsible for where you run this and for anything that happens as a result.
+
+### No warranty
+
+This software is provided **AS-IS, WITHOUT WARRANTY OF ANY KIND**, express or implied, including but not limited to the warranties of merchantability, fitness for a particular purpose, and noninfringement. In no event shall the author or copyright holder be liable for any claim, damages, or other liability arising from, out of, or in connection with the software or its use. See [`LICENSE`](LICENSE) for the full text.
+
+The vulnerabilities here are intentional and will not be "fixed." Security reports about the deliberate teaching vulnerabilities are out of scope; anything genuinely unintended is welcome as a normal issue.
+
+---
+
 > **Naming:** the lab, the in-fiction neobank, and the courseware narrative are all **Eiger**; the assistant is **Iggy**. The Python package is still named `halcyon` (historical — kept to avoid a churny rename). Some in-app strings and the `HALO-ACT-` grading marker still carry the old "Halcyon"/"Halo" names; those are tracked separately from this doc.
 
 ## Doctrine (load-bearing)
@@ -44,3 +70,9 @@ open http://localhost:8000/                           # reach-test → then the 
 👉 **[`docs/STATUS.md`](docs/STATUS.md) is the single source of truth for build status and how to resume.** It covers the architecture, the per-module summary, how to run/test/deploy, the M6 starting point, and deferred cleanups.
 
 Planning workspace / full course context lives in the `Blackhat` workspace (`halcyon-lab-spec.md`, `HANDOFF.md`, `CLAUDE.md`).
+
+## License
+
+MIT © 2026 KK Mookhey. See [`LICENSE`](LICENSE).
+
+Provided **as-is, with no warranty** — and note the deliberate-vulnerability warning at the top of this file before deploying anything.
