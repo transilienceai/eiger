@@ -20,8 +20,10 @@ _TOKEN_MARKER = "EIGER_CI_TOKEN="
 def _extract_token(blob_content):
     """Pull the CI token out of the /source/blob HTTP response body the way a
     participant would -- never through the ChainProvider back-channel. When
-    SEC_SECRET_SCANNING scrubs the token out of the body, this returns "",
-    which is exactly what a participant would be stuck with.
+    SEC_SECRET_SCANNING scrubs the token, the marker line survives (only the
+    value is replaced), so this returns the literal placeholder
+    "***REDACTED-BY-SECRET-SCANNER***" -- not "" -- which is exactly the
+    unusable value a participant would be stuck with.
     """
     idx = blob_content.find(_TOKEN_MARKER)
     if idx == -1:
