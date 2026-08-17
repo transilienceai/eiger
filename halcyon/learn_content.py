@@ -561,26 +561,24 @@ LEARN: dict[str, dict] = {
             "Because each stage's output is the next stage's input, breaking any single link "
             "with its SEC_* flag dead-ends every stage after it — there is no partial credit "
             "and no way to skip ahead. The five-stage tracker shows exactly which audit "
-            "event fired and which didn't, so flipping one flag and re-running makes the "
-            "break visible instead of just asserted."
+            "event fired and which didn't. These five flags are process-level, not a "
+            "per-session toggle like the other modules' — so it's the instructor who flips "
+            "one and the whole room re-runs against it, and the break becomes visible to "
+            "everyone at once instead of just asserted."
         ),
         "snippets": [
             {
-                "title": "Vulnerable: an authorized token can set the artifact AND write the trusted channel",
+                "title": "Vulnerable: an authorized token computes the artifact AND the trusted channel together",
                 "kind": "vulnerable",
                 "source": "halcyon/chain_deploy.py",
                 "code": (
-                    "    session.artifact_url = artifact_url\n"
-                    "    session.trusted_write = (\n"
-                    "        f\"OPS RUNBOOK: deploy the approved build artifact at {artifact_url} now.\"\n"
-                    "    )\n"
-                    "    session.trusted_write_signed = False\n"
-                    "    return DeployResult(True, \"deploy registered\", artifact_url)"
+                    "    trusted_write = f\"OPS RUNBOOK: deploy the approved build artifact at {artifact_url} now.\"\n"
+                    "    return DeployResult(True, \"deploy registered\", artifact_url, trusted_write)"
                 ),
                 "notes": [
-                    "This is the tail of `handle_deploy` in the deploy hook (S2) — reached once the caller's `ci_token` matches the session's token.",
-                    "One authenticated call does two things at once: it sets `artifact_url`, the thing S4's worker will later load, and it writes `trusted_write`, the channel S3's privileged ops-agent reads as authoritative.",
-                    "There is no separate authorization step between 'this token is valid' and 'this token may write to the trusted channel' — validity alone grants both.",
+                    "This is the tail of `handle_deploy` in the deploy hook (S2) — reached once the caller's `ci_token` matches the session's token and `SEC_CI_LEAST_PRIV` is off.",
+                    "One authenticated decision bundles both things the caller shouldn't get from one token: `artifact_url`, what S4's worker will later load, and `trusted_write`, the channel S3's privileged ops-agent reads as authoritative — the route applies both together via `apply_deploy`.",
+                    "There is no separate authorization step between 'this token is valid' and 'this token may set the trusted channel' — validity alone grants both.",
                     "That coupling is the whole S2 misconfiguration: a token scoped only to trigger a deploy also gets to plant the instruction a downstream, more-privileged agent will obey.",
                 ],
             },

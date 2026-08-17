@@ -61,6 +61,7 @@
     letter-spacing: .08em; }
   .sb-row { display: flex; align-items: center; justify-content: space-between; margin: .5rem 0;
     font-size: .85rem; }
+  .sb-note { margin: 0; font-size: .8rem; line-height: 1.4; color: var(--muted); }
   .level-toggle { font: inherit; font-size: .78rem; min-width: 2.4rem; padding: .22rem .55rem; cursor: pointer;
     border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); color: var(--muted); }
   .level-toggle[data-level="L2"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
@@ -395,7 +396,19 @@
     const h = document.createElement("h3");
     h.textContent = "Guardrails";
     sidebar.appendChild(h);
-    for (const { m, label } of TAB_MODULES[tab]) {
+    const mods = TAB_MODULES[tab];
+    if (mods.length === 0) {
+      // CHAIN: no per-session toggles here, by design -- the capstone's five
+      // SEC_* flags are process-level (see the CHAIN learn primer), so an
+      // instructor flips one and the whole room re-runs against it. Explain
+      // that so the empty sidebar reads as a deliberate teaching point.
+      const note = document.createElement("p");
+      note.className = "sb-note";
+      note.textContent = "Capstone guards are process-level (env flags), not per-session toggles — the instructor flips one and the room re-runs to see the break.";
+      sidebar.appendChild(note);
+      return;
+    }
+    for (const { m, label } of mods) {
       const row = document.createElement("div");
       row.className = "sb-row";
       const name = document.createElement("span");
