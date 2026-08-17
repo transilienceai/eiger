@@ -107,7 +107,33 @@ def test_capstone_learn_panel_renders():
     client, _, _ = make_chain_client({"HALCYON_MODE": "vulnerable"}, [])
     text = client.get("/chat", params={"session": "p1"}).text
     assert "Kill Chain" in text
-    assert "SEC_CI_LEAST_PRIV" in text  # a guard snippet rendered in the learn panel
+    assert "SEC_CI_LEAST_PRIV" in text  # the guard snippet's title names the flag (source uses lowercase)
+
+
+def test_capstone_stage_tracker_keys_match_validator_order():
+    # Highest-consequence untested drift: if an event_type string in
+    # validators.chain.ORDER is ever renamed without updating the template's
+    # CHAIN_STAGE_LABELS keys, the tracker would silently show all five stages
+    # unmet forever -- a false fail live in front of participants, with every
+    # other test still green. Pin the correspondence here.
+    from halcyon.validators.chain import ORDER
+
+    client, _, _ = make_chain_client({"HALCYON_MODE": "vulnerable"}, [])
+    text = client.get("/chat", params={"session": "p1"}).text
+    for event_type in ORDER:
+        assert event_type in text, f"stage key {event_type!r} missing from capstone tracker"
+
+
+def test_capstone_source_browser_renders_commit_log_and_does_not_spoil_it():
+    # S1's actual discovery mechanism is the commit log (source_browser.py's
+    # docstring: "the commit log tells a 'committed a token, reverted it'
+    # story that lures the participant into git history"). The tree alone
+    # ("click the four files") isn't the intended puzzle; the panel prose
+    # must not spoil the inference the fixture was built to teach either.
+    client, _, _ = make_chain_client({"HALCYON_MODE": "vulnerable"}, [])
+    text = client.get("/chat", params={"session": "p1"}).text
+    assert "data.log" in text                    # the commit log is actually rendered
+    assert "committed-then-reverted" not in text  # prose no longer spoils the inference
 
 
 def test_main_app_wires_chain_endpoints():

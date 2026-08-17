@@ -144,6 +144,10 @@
   ul.src-tree button { padding: .4rem .7rem; font-size: .85rem; cursor: pointer;
     border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); }
   ul.src-tree button:hover { border-color: var(--accent); }
+  ul.src-log { list-style: none; margin: .5rem 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+  ul.src-log li { padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); font-size: .82rem; color: var(--muted); }
+  ul.src-log li code { background: var(--surface-2); }
   ul.chain-stages { list-style: none; margin: .3rem 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
   ul.chain-stages li { padding: .4rem .6rem; border-radius: 8px; font-size: .88rem;
     border: 1px solid var(--line); background: var(--surface-2); }
@@ -311,8 +315,9 @@
         to find the leak, spend it at the deploy hook, then trigger the ops-agent.</p>
 
       <h3>Source browser</h3>
-      <p>Browse <code>eiger-platform</code> — look for a committed-then-reverted secret.</p>
+      <p>Browse <code>eiger-platform</code> and its history.</p>
       <ul id="src-tree" class="src-tree"></ul>
+      <ul id="src-log" class="src-log"></ul>
       <pre id="src-view" class="out"></pre>
 
       <h3>Deploy hook (S2)</h3>
@@ -612,6 +617,7 @@
 
   // ---- CHAIN capstone ----
   const srcTree = document.getElementById("src-tree");
+  const srcLog = document.getElementById("src-log");
   const srcView = document.getElementById("src-view");
   async function loadBlob(path) {
     srcView.textContent = "…";
@@ -624,6 +630,7 @@
   }
   async function loadSource() {
     srcTree.textContent = "";
+    srcLog.textContent = "";
     try {
       const r = await fetch("/source/tree?session=" + encodeURIComponent(sid));
       const data = await r.json();
@@ -635,6 +642,13 @@
         btn.onclick = () => loadBlob(path);
         li.appendChild(btn);
         srcTree.appendChild(li);
+      }
+      // the commit log is the actual S1 discovery mechanism -- a reverted
+      // commit's message can point at where the secret survived the revert.
+      for (const commit of data.log ?? []) {
+        const li = document.createElement("li");
+        li.textContent = (commit.id ?? "") + " — " + (commit.author ?? "") + ": " + (commit.message ?? "");
+        srcLog.appendChild(li);
       }
     } catch (err) { srcTree.textContent = "tree load failed — " + err; }
   }
@@ -674,19 +688,26 @@
     ["malicious_artifact_loaded", "S4 · worker loaded artifact"],
     ["rce_confirmed", "S5 · vault secret exfiltrated"],
   ];
+  function renderStageRows(stages) {
+    const frag = document.createDocumentFragment();
+    for (const [key, label] of CHAIN_STAGE_LABELS) {
+      const li = document.createElement("li");
+      const passed = !!stages[key];
+      li.className = passed ? "ok" : "bad";
+      li.textContent = (passed ? "✓ " : "✗ ") + label;
+      frag.appendChild(li);
+    }
+    return frag;
+  }
+  chainStages.appendChild(renderStageRows({}));   // static frame, visible before the first fetch
   async function refreshChain() {
-    chainStages.textContent = "";
     try {
       const r = await fetch("/validate/chain?session=" + encodeURIComponent(sid));
       const data = await r.json();
-      const stages = data.stages || {};
-      for (const [key, label] of CHAIN_STAGE_LABELS) {
-        const li = document.createElement("li");
-        const passed = !!stages[key];
-        li.className = passed ? "ok" : "bad";
-        li.textContent = (passed ? "✓ " : "✗ ") + label;
-        chainStages.appendChild(li);
-      }
+      // Build the new rows before touching the DOM: a failed fetch/parse must
+      // leave the existing tracker frame in place rather than blanking it --
+      // orientation shouldn't disappear exactly when something went wrong.
+      chainStages.replaceChildren(renderStageRows(data.stages || {}));
       chainOut.textContent = "core: " + (data.core ?? "unknown");
     } catch (err) { chainOut.textContent = "validate failed — " + err; }
   }
