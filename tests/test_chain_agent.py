@@ -68,6 +68,25 @@ def test_read_runbook_authoritative_when_signed_even_with_guard_on():
     assert authoritative is True and text == s.trusted_write
 
 
+def test_unknown_tool_name_does_not_detonate_chain():
+    # The `if step.name == "deploy"` dispatch in run_ops_agent's tool-call loop
+    # is the only guard on this branch with no test behind it: a refactor that
+    # dropped it would silently restore "any tool name detonates the chain"
+    # with the rest of the suite green. Script a bogus tool name and assert no
+    # deploy side effects happen and the loop keeps going.
+    store = InMemoryStore()
+    worker = _RecordingWorker()
+    llm = StubToolLLM([ToolCall("deploy_artifact", {"artifact_url": "http://x/evil.pkl"}),
+                       FinalAnswer("done")])
+    reply, calls = run_ops_agent(llm, "p1", "run the runbook", _armed_session(),
+                                 worker, store, VULN)
+    fired = [e for e in store.events_since_reset("p1", "chain")
+             if e.event_type == audit.TRUSTED_INJECTION_FIRED]
+    assert fired == [] and worker.calls == []
+    assert calls[0][2] == "unknown tool: deploy_artifact"
+    assert reply == "done"
+
+
 def test_deploy_uses_session_artifact_url_not_tool_argument():
     store = InMemoryStore()
     worker = _RecordingWorker()
