@@ -91,3 +91,15 @@ def test_reset_chain_clears_pass_and_rotates_secret():
     client.post("/reset/chain", json={"session_id": "p1"})
     assert client.get("/validate/chain", params={"session": "p1"}).json()["core"] == "fail"
     assert chain_for("p1").vault_master != old
+
+
+def test_main_app_wires_chain_endpoints():
+    # main.py must construct create_app with a ChainProvider so /source/tree exists.
+    # We read the source file directly instead of importing to avoid database connection
+    # requirements that occur at halcyon.main module load time.
+    from pathlib import Path
+
+    main_src = Path(__file__).parent.parent / "halcyon" / "main.py"
+    src = main_src.read_text()
+    assert "ChainProvider" in src
+    assert "chain_for" in src
