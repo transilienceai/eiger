@@ -43,4 +43,11 @@ def validate(store: Store, session_id: str, vault_master: str) -> dict:
     durable_core = core or marker_already_recorded
 
     progress.mark(store, session_id, MODULE, durable_core, False)
-    return {"core": "pass" if core else "fail", "stages": stages}
+    # Ruling (fix round 1): the headline `core` reports durable_core, not this
+    # call's live `core` observation. A container redeploy rotates vault_master
+    # (in-process, un-persisted), which flips `secret_ok` to False against the
+    # very same durable audit events -- without this, a participant who already
+    # earned the pass would see a false "fail" here while the board (reading
+    # the CHAIN_CORE_PASSED marker) still correctly shows pass. `stages` stays
+    # a live read of the current reset-epoch -- only this headline is durable.
+    return {"core": "pass" if durable_core else "fail", "stages": stages}

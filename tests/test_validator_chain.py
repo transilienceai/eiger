@@ -70,8 +70,17 @@ def test_stored_pass_survives_a_later_failing_revalidate():
     assert progress.read(store, "p1", "chain") == (True, False)
 
     r = chain.validate(store, "p1", "NEW-SECRET-AFTER-REDEPLOY")
-    assert r["core"] == "fail"  # this call's own observation is truthful...
-    assert progress.read(store, "p1", "chain") == (True, False)  # ...but the stored pass stands
+    # Ruling (fix round 1, superseding the original comment here): the
+    # headline `core` reports durable_core, not this call's live secret_ok
+    # observation. A participant who already earned the pass must keep
+    # seeing "pass" in /validate/chain until an explicit reset -- otherwise
+    # a redeploy (which rotates vault_master, an in-process/un-persisted
+    # value) flips a genuinely-earned pass to a false "fail" in the UI while
+    # the board (which reads the durable CHAIN_CORE_PASSED marker) still
+    # correctly shows pass. "Truthful about what they achieved" wins over
+    # "truthful about this run".
+    assert r["core"] == "pass"
+    assert progress.read(store, "p1", "chain") == (True, False)  # ...and the stored pass stands
 
 
 def test_reset_then_failed_full_replay_clears_pass():

