@@ -93,6 +93,23 @@ def test_reset_chain_clears_pass_and_rotates_secret():
     assert chain_for("p1").vault_master != old
 
 
+def test_chat_page_has_capstone_panel():
+    client, _, _ = make_chain_client({"HALCYON_MODE": "vulnerable"}, [])
+    text = client.get("/chat", params={"session": "p1"}).text
+    assert 'data-tab="CHAIN"' in text and 'data-layer="CHAIN"' in text
+    for el in ('id="src-tree"', 'id="src-view"', 'id="deploy-token"', 'id="deploy-url"',
+               'id="deploy-btn"', 'id="ops-run"', 'id="chain-stages"',
+               'id="chain-validate"', 'id="chain-reset"'):
+        assert el in text, f"missing capstone element {el}"
+
+
+def test_capstone_learn_panel_renders():
+    client, _, _ = make_chain_client({"HALCYON_MODE": "vulnerable"}, [])
+    text = client.get("/chat", params={"session": "p1"}).text
+    assert "Kill Chain" in text
+    assert "SEC_CI_LEAST_PRIV" in text  # a guard snippet rendered in the learn panel
+
+
 def test_main_app_wires_chain_endpoints():
     # main.py must construct create_app with a ChainProvider so /source/tree exists.
     # We read the source file directly instead of importing to avoid database connection
