@@ -18,7 +18,7 @@ from halcyon import (
 )
 from halcyon.bank import Bank
 from halcyon.chain_agent import run_ops_agent
-from halcyon.chain_deploy import handle_deploy
+from halcyon.chain_deploy import apply_deploy, handle_deploy
 from halcyon.chain_state import ChainProvider
 from halcyon.chain_worker import StubWorker
 from halcyon.config import MODULE_FLAGS, Settings, effective_settings
@@ -261,11 +261,9 @@ def create_app(
 
     @app.post("/reset/{module}")
     def reset(module: str, body: ResetIn) -> dict:
+        store.write_reset_marker(body.session_id, module)
         if module == "chain":
             chain.reset(body.session_id)
-            store.write_reset_marker(body.session_id, "chain")
-            return {"status": "reset", "module": "chain"}
-        store.write_reset_marker(body.session_id, module)
         if module in ("m1", "m2"):
             sess.clear_history(body.session_id, "chat")
         if module == "m3":
@@ -474,8 +472,14 @@ def create_app(
         cs = chain(body.session_id)
         result = handle_deploy(cs, body.ci_token, body.artifact_url, settings)
         if result.ok:
+            # Record MISCONFIG_EXPLOITED BEFORE mutating session state: a concurrent
+            # /api/ops-agent request can only observe session.trusted_write (and so
+            # fire TRUSTED_INJECTION_FIRED) once apply_deploy below has run, which is
+            # strictly after this audit event -- so the two events can never land
+            # out of order no matter how the requests interleave.
             audit.record(store, body.session_id, "chain", audit.MISCONFIG_EXPLOITED,
                          body.session_id, {"artifact_url": result.artifact_url})
+            apply_deploy(cs, result)
         return {"ok": result.ok, "reason": result.reason}
 
     @app.post("/api/ops-agent")
@@ -488,6 +492,15 @@ def create_app(
 
     @app.post("/chain/callback")
     def chain_callback(body: CallbackIn) -> dict:
+        # Phase 1 is dead code in practice (StubWorker.run calls _chain_report
+        # in-process; nothing HTTP-POSTs here yet), but this is the Phase-2 seam
+        # for a real worker container, so it must be gated now: an unauthenticated
+        # caller with the wrong secret must not be able to record rce_confirmed at
+        # all, since the validator's ordering check pins the *first* occurrence of
+        # each event -- one junk callback before a session starts would otherwise
+        # permanently brick that session's (and any session= it names) chain.
+        if body.secret != chain(body.session_id).vault_master:
+            return {"status": "rejected"}
         _chain_report(body.session_id, body.secret)
         return {"status": "received"}
 
