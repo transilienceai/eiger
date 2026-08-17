@@ -128,12 +128,19 @@ def test_capstone_source_browser_renders_commit_log_and_does_not_spoil_it():
     # S1's actual discovery mechanism is the commit log (source_browser.py's
     # docstring: "the commit log tells a 'committed a token, reverted it'
     # story that lures the participant into git history"). The tree alone
-    # ("click the four files") isn't the intended puzzle; the panel prose
-    # must not spoil the inference the fixture was built to teach either.
+    # ("click the four files") isn't the intended puzzle; nothing server-rendered
+    # into /chat -- panel prose or shipped script, both readable via View Source --
+    # may spoil that inference either, in any phrasing.
+    #
+    # The word "revert"/"reverted" is banned outright from this page rather than
+    # from one specific phrase: the commit log's own "Revert ..." wording is
+    # runtime JSON returned by GET /source/tree, never server-rendered into
+    # /chat itself, so this assertion can't collide with that legitimate fixture
+    # data -- it only guards the page a participant's View Source actually shows.
     client, _, _ = make_chain_client({"HALCYON_MODE": "vulnerable"}, [])
     text = client.get("/chat", params={"session": "p1"}).text
-    assert "data.log" in text                    # the commit log is actually rendered
-    assert "committed-then-reverted" not in text  # prose no longer spoils the inference
+    assert "data.log" in text              # the commit log is actually rendered
+    assert "revert" not in text.lower()    # ...without spoiling what it's for
 
 
 def test_main_app_wires_chain_endpoints():

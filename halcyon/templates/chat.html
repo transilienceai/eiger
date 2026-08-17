@@ -643,8 +643,7 @@
         li.appendChild(btn);
         srcTree.appendChild(li);
       }
-      // the commit log is the actual S1 discovery mechanism -- a reverted
-      // commit's message can point at where the secret survived the revert.
+      // render the log with the same createElement/textContent pattern as the tree
       for (const commit of data.log ?? []) {
         const li = document.createElement("li");
         li.textContent = (commit.id ?? "") + " — " + (commit.author ?? "") + ": " + (commit.message ?? "");
