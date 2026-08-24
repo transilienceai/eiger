@@ -75,6 +75,14 @@ def encode_output(text: str, settings: Settings) -> str:
     return text
 
 
+def scrub_secrets(text: str, secret: str, settings: Settings) -> str:
+    """S1 guard (SEC_SECRET_SCANNING): a secret-scanner would keep the token out
+    of source history. On → redact it wherever it appears; off → serve it raw."""
+    if settings.sec_secret_scanning and secret and secret in text:
+        return text.replace(secret, "***REDACTED-BY-SECRET-SCANNER***")
+    return text
+
+
 RAG_MARKER = "RAG-OWNED-7788"
 RAG_MEMO_CANARY = "FRAUD-MEMO-4417"  # distinctive ref inside the restricted memo; disclosure proof
 

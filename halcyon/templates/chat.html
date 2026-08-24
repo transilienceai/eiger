@@ -22,6 +22,7 @@
     --accent: #38bdf8; --accent-2: #6ee7ff; --accent-ink: #041018;
     --ok: #34d399; --bad: #fb7185;
     --l0: #38bdf8; --l1: #34d399; --l2: #f59e0b; --l3: #a78bfa; --l4: #f472b6; --l5: #fb7185;
+    --lchain: #facc15;
   }
   * { box-sizing: border-box; }
   body { font-family: system-ui, sans-serif; margin: 0; color: var(--text); background: var(--bg); }
@@ -49,6 +50,7 @@
   nav#tabs .tab[data-tab="L0"] { --hue: var(--l0); } nav#tabs .tab[data-tab="L1"] { --hue: var(--l1); }
   nav#tabs .tab[data-tab="L2"] { --hue: var(--l2); } nav#tabs .tab[data-tab="L3"] { --hue: var(--l3); }
   nav#tabs .tab[data-tab="L4"] { --hue: var(--l4); } nav#tabs .tab[data-tab="L5"] { --hue: var(--l5); }
+  nav#tabs .tab[data-tab="CHAIN"] { --hue: var(--lchain); }
   nav#tabs .tab::before { background: var(--hue); }
   nav#tabs .tab.active { color: var(--text); border-color: var(--line); background: var(--surface);
     margin-bottom: -1px; font-weight: 600; box-shadow: inset 0 2px 0 var(--hue); }
@@ -59,6 +61,7 @@
     letter-spacing: .08em; }
   .sb-row { display: flex; align-items: center; justify-content: space-between; margin: .5rem 0;
     font-size: .85rem; }
+  .sb-note { margin: 0; font-size: .8rem; line-height: 1.4; color: var(--muted); }
   .level-toggle { font: inherit; font-size: .78rem; min-width: 2.4rem; padding: .22rem .55rem; cursor: pointer;
     border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); color: var(--muted); }
   .level-toggle[data-level="L2"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
@@ -137,6 +140,20 @@
     font-size: .8rem; line-height: 1.4; }
   .snippet .notes { margin: .5rem 0 .7rem 1.1rem; color: var(--muted); font-size: .84rem; }
   .snippet .notes li { margin: .2rem 0; }
+  ul.src-tree { list-style: none; margin: .3rem 0; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem; }
+  ul.src-tree li { margin: 0; }
+  ul.src-tree button { padding: .4rem .7rem; font-size: .85rem; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); }
+  ul.src-tree button:hover { border-color: var(--accent); }
+  ul.src-log { list-style: none; margin: .5rem 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+  ul.src-log li { padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); font-size: .82rem; color: var(--muted); }
+  ul.src-log li code { background: var(--surface-2); }
+  ul.chain-stages { list-style: none; margin: .3rem 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+  ul.chain-stages li { padding: .4rem .6rem; border-radius: 8px; font-size: .88rem;
+    border: 1px solid var(--line); background: var(--surface-2); }
+  ul.chain-stages li.ok { color: var(--ok); border-color: var(--ok); }
+  ul.chain-stages li.bad { color: var(--bad); border-color: var(--bad); }
 </style>
 
 <div id="cfg" data-encoding="{{ output_encoding }}" data-mode="{{ mode }}"></div>
@@ -178,6 +195,7 @@
   <button class="tab" data-tab="L3" type="button">L3 MCP</button>
   <button class="tab" data-tab="L4" type="button">L4 Multi-agent</button>
   <button class="tab" data-tab="L5" type="button">L5 Production</button>
+  <button class="tab" data-tab="CHAIN" type="button">Capstone</button>
 </nav>
 
 <div id="body">
@@ -290,6 +308,42 @@
       </p>
     </section>
 
+    <section data-layer="CHAIN" hidden>{% if learn.get('CHAIN') %}{{ learn_details(learn['CHAIN']) }}{% endif %}
+      <h2>Capstone — Kill Chain (S1–S5)</h2>
+      <p>One campaign, five coupled links: a leaked CI token unlocks a misconfigured deploy hook,
+        whose trusted-source write the privileged ops-agent obeys, loading a poisoned artifact in
+        the build worker, which reads and exfiltrates the vault master secret. Browse the mock repo
+        to find the leak, spend it at the deploy hook, then trigger the ops-agent.</p>
+
+      <h3>Source browser</h3>
+      <p>Browse <code>eiger-platform</code> and its history.</p>
+      <ul id="src-tree" class="src-tree"></ul>
+      <ul id="src-log" class="src-log"></ul>
+      <pre id="src-view" class="out"></pre>
+
+      <h3>Deploy hook (S2)</h3>
+      <div class="row">
+        <input id="deploy-token" type="text" placeholder="CI token" autocomplete="off" />
+        <input id="deploy-url" type="text" placeholder="Artifact URL" autocomplete="off" />
+        <button id="deploy-btn" type="button">Deploy</button>
+      </div>
+      <div id="deploy-out" class="out"></div>
+
+      <h3>Ops-agent (S3 → S5)</h3>
+      <div class="row">
+        <button id="ops-run" type="button">Run the runbook</button>
+      </div>
+      <div id="ops-out" class="out"></div>
+
+      <h3>Chain tracker</h3>
+      <ul id="chain-stages" class="chain-stages"></ul>
+      <div class="row">
+        <button id="chain-validate" type="button">Validate</button>
+        <button id="chain-reset" type="button">Reset chain</button>
+      </div>
+      <div id="chain-out" class="out"></div>
+    </section>
+
   </main>
 </div>
 
@@ -331,6 +385,7 @@
     L3: [{ m: "m6", label: "M6 MCP" }],
     L4: [{ m: "m7", label: "M7 multi-agent" }],
     L5: [{ m: "m8", label: "M8 guardrails" }],
+    CHAIN: [],                                          // capstone flags aren't per-session toggles
   };
   let levels = {};                                     // module -> "L1" | "L2"
   const sidebar = document.getElementById("sidebar");
@@ -341,7 +396,19 @@
     const h = document.createElement("h3");
     h.textContent = "Guardrails";
     sidebar.appendChild(h);
-    for (const { m, label } of TAB_MODULES[tab]) {
+    const mods = TAB_MODULES[tab];
+    if (mods.length === 0) {
+      // CHAIN: no per-session toggles here, by design -- the capstone's five
+      // SEC_* flags are process-level (see the CHAIN learn primer), so an
+      // instructor flips one and the whole room re-runs against it. Explain
+      // that so the empty sidebar reads as a deliberate teaching point.
+      const note = document.createElement("p");
+      note.className = "sb-note";
+      note.textContent = "Capstone guards are process-level (env flags), not per-session toggles — the instructor flips one and the room re-runs to see the break.";
+      sidebar.appendChild(note);
+      return;
+    }
+    for (const { m, label } of mods) {
       const row = document.createElement("div");
       row.className = "sb-row";
       const name = document.createElement("span");
@@ -372,6 +439,7 @@
     tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     sections.forEach((s) => { s.hidden = s.dataset.layer !== tab; });
     renderSidebar(tab);
+    if (tab === "CHAIN") { loadSource(); refreshChain(); }
   }
   tabs.forEach((t) => { t.onclick = () => activate(t.dataset.tab); });
 
@@ -558,6 +626,109 @@
       const data = await r.json();
       gout.textContent = data.reply ?? ("error: " + JSON.stringify(data));
     } catch (err) { gout.textContent = "request failed — " + err; }
+  };
+
+  // ---- CHAIN capstone ----
+  const srcTree = document.getElementById("src-tree");
+  const srcLog = document.getElementById("src-log");
+  const srcView = document.getElementById("src-view");
+  async function loadBlob(path) {
+    srcView.textContent = "…";
+    try {
+      const r = await fetch("/source/blob?session=" + encodeURIComponent(sid)
+        + "&path=" + encodeURIComponent(path));
+      const data = await r.json();
+      srcView.textContent = data.content ?? ("error: " + JSON.stringify(data));
+    } catch (err) { srcView.textContent = "blob load failed — " + err; }
+  }
+  async function loadSource() {
+    srcTree.textContent = "";
+    srcLog.textContent = "";
+    try {
+      const r = await fetch("/source/tree?session=" + encodeURIComponent(sid));
+      const data = await r.json();
+      for (const path of data.tree ?? []) {
+        const li = document.createElement("li");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = path;
+        btn.onclick = () => loadBlob(path);
+        li.appendChild(btn);
+        srcTree.appendChild(li);
+      }
+      // render the log with the same createElement/textContent pattern as the tree
+      for (const commit of data.log ?? []) {
+        const li = document.createElement("li");
+        li.textContent = (commit.id ?? "") + " — " + (commit.author ?? "") + ": " + (commit.message ?? "");
+        srcLog.appendChild(li);
+      }
+    } catch (err) { srcTree.textContent = "tree load failed — " + err; }
+  }
+
+  const deployOut = document.getElementById("deploy-out");
+  document.getElementById("deploy-btn").onclick = async () => {
+    deployOut.textContent = "…";
+    const body = {
+      session_id: sid,
+      ci_token: document.getElementById("deploy-token").value,
+      artifact_url: document.getElementById("deploy-url").value,
+    };
+    try {
+      const r = await postJSON("/internal/deploy", body);
+      const data = await r.json();
+      deployOut.textContent = (data.ok ? "ok: " : "denied: ") + data.reason;
+    } catch (err) { deployOut.textContent = "request failed — " + err; }
+    refreshChain();
+  };
+
+  const opsOut = document.getElementById("ops-out");
+  document.getElementById("ops-run").onclick = async () => {
+    opsOut.textContent = "…";
+    try {
+      const r = await postJSON("/api/ops-agent", { session_id: sid, message: "run the runbook" });
+      renderAgent(opsOut, await r.json());
+    } catch (err) { opsOut.textContent = "request failed — " + err; }
+    refreshChain();
+  };
+
+  const chainStages = document.getElementById("chain-stages");
+  const chainOut = document.getElementById("chain-out");
+  const CHAIN_STAGE_LABELS = [
+    ["secret_leak_discovered", "S1 · CI token leaked"],
+    ["misconfig_exploited", "S2 · deploy hook misused"],
+    ["trusted_injection_fired", "S3 · ops-agent obeyed trusted write"],
+    ["malicious_artifact_loaded", "S4 · worker loaded artifact"],
+    ["rce_confirmed", "S5 · vault secret exfiltrated"],
+  ];
+  function renderStageRows(stages) {
+    const frag = document.createDocumentFragment();
+    for (const [key, label] of CHAIN_STAGE_LABELS) {
+      const li = document.createElement("li");
+      const passed = !!stages[key];
+      li.className = passed ? "ok" : "bad";
+      li.textContent = (passed ? "✓ " : "✗ ") + label;
+      frag.appendChild(li);
+    }
+    return frag;
+  }
+  chainStages.appendChild(renderStageRows({}));   // static frame, visible before the first fetch
+  async function refreshChain() {
+    try {
+      const r = await fetch("/validate/chain?session=" + encodeURIComponent(sid));
+      const data = await r.json();
+      // Build the new rows before touching the DOM: a failed fetch/parse must
+      // leave the existing tracker frame in place rather than blanking it --
+      // orientation shouldn't disappear exactly when something went wrong.
+      chainStages.replaceChildren(renderStageRows(data.stages || {}));
+      chainOut.textContent = "core: " + (data.core ?? "unknown");
+    } catch (err) { chainOut.textContent = "validate failed — " + err; }
+  }
+  document.getElementById("chain-validate").onclick = refreshChain;
+  document.getElementById("chain-reset").onclick = async () => {
+    try {
+      await postJSON("/reset/chain", { session_id: sid });
+    } catch (err) { /* fall through to refresh regardless */ }
+    refreshChain();
   };
 
   // ---- welcome overlay ----

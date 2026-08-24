@@ -86,3 +86,24 @@ def test_guardrails_flag_defaults_to_mode():
     assert load_settings(
         {"HALCYON_MODE": "vulnerable", "SEC_GUARDRAILS": "on"}
     ).sec_guardrails is True
+
+
+def test_chain_flags_follow_mode_default():
+    from halcyon.config import load_settings
+    vuln = load_settings({"HALCYON_MODE": "vulnerable"})
+    assert vuln.sec_secret_scanning is False
+    assert vuln.sec_ci_least_priv is False
+    assert vuln.sec_trusted_source_auth is False
+    assert vuln.sec_worker_sandbox is False
+    sec = load_settings({"HALCYON_MODE": "secure"})
+    assert sec.sec_secret_scanning is True
+    assert sec.sec_ci_least_priv is True
+    assert sec.sec_trusted_source_auth is True
+    assert sec.sec_worker_sandbox is True
+
+
+def test_chain_flags_env_override():
+    from halcyon.config import load_settings
+    s = load_settings({"HALCYON_MODE": "vulnerable", "SEC_CI_LEAST_PRIV": "1"})
+    assert s.sec_ci_least_priv is True
+    assert s.sec_secret_scanning is False

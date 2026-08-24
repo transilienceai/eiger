@@ -19,6 +19,9 @@ venv/
 pgdata/
 ollama/
 
+# Agent scratch (SDD ledgers, briefs, review packages)
+.superpowers/
+
 # OS / editor
 .DS_Store
 .idea/

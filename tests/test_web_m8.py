@@ -49,6 +49,6 @@ def test_capstone_reports_exploited_modules():
     client = _client("vulnerable")
     client.post("/api/guarded-chat", json={"session_id": "s", "message": OBFUSCATED})
     r = client.get("/capstone", params={"session": "s"}).json()
-    assert r["total"] == 8
+    assert r["total"] == 9
     by_id = {m["module"]: m for m in r["modules"]}
     assert by_id["m8"]["exploited"] is True

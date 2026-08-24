@@ -24,6 +24,19 @@ GUARDRAIL_BYPASSED = "guardrail_bypassed"
 GUARDRAIL_HARDENED_BLOCK = "guardrail_hardened_block"
 GUARDRAIL_DECISION = "guardrail_decision"
 
+# S10 kill-chain capstone (module "chain") — ordered exploit events
+SECRET_LEAK_DISCOVERED = "secret_leak_discovered"
+MISCONFIG_EXPLOITED = "misconfig_exploited"
+TRUSTED_INJECTION_FIRED = "trusted_injection_fired"
+MALICIOUS_ARTIFACT_LOADED = "malicious_artifact_loaded"
+RCE_CONFIRMED = "rce_confirmed"
+
+# Not a stage — a durable pass marker the chain validator writes to the
+# audit log itself, so a stored pass survives a stale re-validate (e.g. a
+# redeploy rotating vault_master) but is still genuinely retracted by a
+# module_reset, which drops every event before it, including this one.
+CHAIN_CORE_PASSED = "chain_core_passed"
+
 
 def record(
     store: Store,

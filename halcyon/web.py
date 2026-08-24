@@ -13,16 +13,21 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from pydantic import BaseModel
 
 from halcyon import (
-    agent, bank_fixtures, capstone, dispute_pipeline, guards, halo, kb_fixtures, learn_content,
-    m4_answers, rag,
+    agent, audit, bank_fixtures, capstone, dispute_pipeline, guards, halo, kb_fixtures,
+    learn_content, m4_answers, rag, source_browser,
 )
 from halcyon.bank import Bank
+from halcyon.chain_agent import run_ops_agent
+from halcyon.chain_deploy import apply_deploy, handle_deploy
+from halcyon.chain_state import ChainProvider
+from halcyon.chain_worker import StubWorker
 from halcyon.config import MODULE_FLAGS, Settings, effective_settings
 from halcyon.kb import KnowledgeBase
 from halcyon.session_state import InMemorySessionState, SessionState
 from halcyon.llm import LLM, OllamaProvider, ToolLLM
 from halcyon.store import Store
 from halcyon.validators import m1, m2, m3, m4, m5, m6, m7, m8
+from halcyon.validators import chain as chain_validator
 
 if TYPE_CHECKING:
     from halcyon.mcp_host import MCPHost
@@ -96,6 +101,17 @@ class ConfigIn(BaseModel):
     api_key: str | None = None
 
 
+class DeployIn(BaseModel):
+    session_id: str
+    ci_token: str
+    artifact_url: str
+
+
+class CallbackIn(BaseModel):
+    session_id: str
+    secret: str
+
+
 _VALIDATORS = {
     "m1": m1.validate,
     "m2": m2.validate,
@@ -117,6 +133,7 @@ def create_app(
     tool_llm_factory: ToolLLMFactory,
     mcp_host_factory: MCPHostFactory,
     session_state: SessionState | None = None,
+    chain_for: ChainProvider | None = None,
 ) -> FastAPI:
     if settings.expose_openapi:
         app = FastAPI(title="Eiger")
@@ -137,6 +154,14 @@ def create_app(
         )
 
     sess: SessionState = session_state or InMemorySessionState()
+
+    chain: ChainProvider = chain_for or ChainProvider()
+
+    def _chain_report(session_id: str, secret: str) -> None:
+        audit.record(store, session_id, "chain", audit.RCE_CONFIRMED,
+                     session_id, {"secret": secret})
+
+    _worker = StubWorker(report=_chain_report)
 
     def _mcfg(
         session_id: str, p: str | None = None, m: str | None = None, k: str | None = None
@@ -227,6 +252,8 @@ def create_app(
 
     @app.get("/validate/{module}")
     def validate(module: str, session: str) -> dict:
+        if module == "chain":
+            return chain_validator.validate(store, session, chain(session).vault_master)
         validator = _VALIDATORS.get(module)
         if validator is None:
             return {"error": f"unknown module {module}"}
@@ -235,6 +262,8 @@ def create_app(
     @app.post("/reset/{module}")
     def reset(module: str, body: ResetIn) -> dict:
         store.write_reset_marker(body.session_id, module)
+        if module == "chain":
+            chain.reset(body.session_id)
         if module in ("m1", "m2"):
             sess.clear_history(body.session_id, "chat")
         if module == "m3":
@@ -282,8 +311,6 @@ def create_app(
         )
 
     from fastapi.responses import Response
-
-    from halcyon import audit
 
     _GIF = bytes.fromhex(
         "47494638396101000100800000ffffff00000021f90401000000002c00000000010001000002024401003b"
@@ -425,5 +452,56 @@ def create_app(
                 audit.record(store, body.session_id, "m4",
                              audit.VULNERABLE_DEPENDENCY_IDENTIFIED, body.session_id)
         return {"correct": correct}
+
+    @app.get("/source/tree")
+    def source_tree(session: str) -> dict:
+        return {"tree": source_browser.tree(), "log": source_browser.log()}
+
+    @app.get("/source/blob")
+    def source_blob(session: str, path: str) -> dict:
+        cs = chain(session)
+        content = guards.scrub_secrets(source_browser.blob(path, cs.ci_token),
+                                       cs.ci_token, settings)
+        if path == source_browser.LEAK_PATH and cs.ci_token and cs.ci_token in content:
+            audit.record(store, session, "chain", audit.SECRET_LEAK_DISCOVERED,
+                         session, {"path": path})
+        return {"path": path, "content": content}
+
+    @app.post("/internal/deploy")
+    def internal_deploy(body: DeployIn) -> dict:
+        cs = chain(body.session_id)
+        result = handle_deploy(cs, body.ci_token, body.artifact_url, settings)
+        if result.ok:
+            # Record MISCONFIG_EXPLOITED BEFORE mutating session state: a concurrent
+            # /api/ops-agent request can only observe session.trusted_write (and so
+            # fire TRUSTED_INJECTION_FIRED) once apply_deploy below has run, which is
+            # strictly after this audit event -- so the two events can never land
+            # out of order no matter how the requests interleave.
+            audit.record(store, body.session_id, "chain", audit.MISCONFIG_EXPLOITED,
+                         body.session_id, {"artifact_url": result.artifact_url})
+            apply_deploy(cs, result)
+        return {"ok": result.ok, "reason": result.reason}
+
+    @app.post("/api/ops-agent")
+    def ops_agent(body: AgentIn) -> dict:
+        tool_llm = tool_llm_factory(*_mcfg(body.session_id, body.provider, body.model, body.api_key))
+        reply, calls = run_ops_agent(
+            tool_llm, body.session_id, body.message, chain(body.session_id),
+            _worker, store, settings)
+        return {"reply": reply, "tool_calls": [{"name": n, "args": a} for n, a, _ in calls]}
+
+    @app.post("/chain/callback")
+    def chain_callback(body: CallbackIn) -> dict:
+        # Phase 1 is dead code in practice (StubWorker.run calls _chain_report
+        # in-process; nothing HTTP-POSTs here yet), but this is the Phase-2 seam
+        # for a real worker container, so it must be gated now: an unauthenticated
+        # caller with the wrong secret must not be able to record rce_confirmed at
+        # all, since the validator's ordering check pins the *first* occurrence of
+        # each event -- one junk callback before a session starts would otherwise
+        # permanently brick that session's (and any session= it names) chain.
+        if body.secret != chain(body.session_id).vault_master:
+            return {"status": "rejected"}
+        _chain_report(body.session_id, body.secret)
+        return {"status": "received"}
 
     return app

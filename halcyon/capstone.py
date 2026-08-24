@@ -12,16 +12,22 @@ CORE_EVENTS: dict[str, list[str]] = {
     "m6": [audit.MCP_POISONED_INVOCATION],
     "m7": [audit.INTER_AGENT_INJECTION_PROPAGATED, audit.UNAUTHORIZED_APPROVAL],
     "m8": [audit.GUARDRAIL_BYPASSED],
+    # S10 capstone: keyed on the durable CHAIN_CORE_PASSED marker (written once by
+    # validators.chain.validate on a genuine pass), not a raw stage event -- that's
+    # the correct signal for "this session cracked the whole chain," and it stays
+    # true even across a redeploy that rotates vault_master (see validators/chain.py).
+    "chain": [audit.CHAIN_CORE_PASSED],
 }
 
 _LAYERS = {
     "m1": "L0 chatbot", "m2": "L0 chatbot", "m3": "L1 RAG", "m4": "ML supply chain",
     "m5": "L2 agent", "m6": "L3 MCP", "m7": "L4 multi-agent", "m8": "L5 guardrail",
+    "chain": "Capstone",
 }
 _ATTACKS = {
     "m1": "operator-token leak", "m2": "stored XSS", "m3": "RAG injection",
     "m4": "poisoned artifact", "m5": "confused-deputy refund", "m6": "MCP tool poisoning",
-    "m7": "inter-agent approval", "m8": "guardrail bypass",
+    "m7": "inter-agent approval", "m8": "guardrail bypass", "chain": "kill-chain exfil",
 }
 
 

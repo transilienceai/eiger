@@ -21,3 +21,19 @@ def test_progress_roundtrip():
     assert progress.read(s, "p1", "m1") == (False, False)
     progress.mark(s, "p1", "m1", True, True)
     assert progress.read(s, "p1", "m1") == (True, True)
+
+
+def test_chain_event_constants_are_distinct():
+    from halcyon import audit
+    chain = [
+        audit.SECRET_LEAK_DISCOVERED,
+        audit.MISCONFIG_EXPLOITED,
+        audit.TRUSTED_INJECTION_FIRED,
+        audit.MALICIOUS_ARTIFACT_LOADED,
+        audit.RCE_CONFIRMED,
+    ]
+    assert chain == [
+        "secret_leak_discovered", "misconfig_exploited", "trusted_injection_fired",
+        "malicious_artifact_loaded", "rce_confirmed",
+    ]
+    assert len(set(chain)) == 5
