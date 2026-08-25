@@ -122,9 +122,9 @@ _TOPICS: dict[str, list[str]] = {
         "Beneficiary allow-lists are maintained per legal entity.",
         "Payment recalls must be initiated within one business day of settlement.",
         "Liquidity buffers are reviewed each morning before the settlement window opens.",
-        "Payroll approvals follow a two-stage workflow: preparation review by finance and final authorisation by treasury.",
+        "Payment approvals follow a two-stage workflow: preparation review by finance and final authorisation by treasury.",
         "Exceptions across all payment types are reconciled weekly by the finance operations team.",
-        "Off-cycle disbursements must be scheduled at least one business day before the transfer cutoff.",
+        "Non-recurring disbursements must be scheduled at least one business day before the transfer cutoff.",
     ],
 }
 
