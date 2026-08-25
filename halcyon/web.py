@@ -238,6 +238,7 @@ def create_app(
     @app.post("/reset/{module}")
     def reset(module: str, body: ResetIn) -> dict:
         store.write_reset_marker(body.session_id, module)
+        # placeholder chain reset between S10's removal and S11's wiring (Task 9)
         if module == "chain":
             store.write_reset_marker(body.session_id, "chain")
             return {"status": "reset", "module": "chain"}
