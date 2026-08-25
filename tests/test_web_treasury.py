@@ -288,3 +288,13 @@ def test_reset_chain_fails_before_rotating_when_kb_is_missing():
     after = tf("p1")
     assert after.ingest_key == before.ingest_key
     assert after.attacker_account == before.attacker_account
+
+
+def test_main_wires_a_treasury_provider():
+    # main.py constructs PostgresStore at import time, so read the source
+    # rather than importing it (a live DB is not available in the suite).
+    from pathlib import Path
+    src = Path("halcyon/main.py").read_text()
+    assert "TreasuryProvider" in src
+    assert "treasury_for" in src
+    assert "SCENARIO_KEYS" in src
