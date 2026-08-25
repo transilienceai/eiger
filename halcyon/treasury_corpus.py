@@ -104,6 +104,12 @@ _POLICY_LINES = [
     "Beneficiary allow-lists are maintained per legal entity.",
     "Payment recalls must be initiated within one business day of settlement.",
     "Liquidity buffers are reviewed each morning before the settlement window opens.",
+    "Payroll approvals follow a two-stage workflow: preparation review by finance and final authorisation by treasury.",
+    "Payroll variance limits are enforced; corrections exceeding 10% of the monthly run require audit review.",
+    "Tax withholding calculations are verified against year-to-date balances before each disbursement.",
+    "Payroll exceptions are reconciled weekly by the finance operations team.",
+    "Off-cycle disbursements must be scheduled at least one business day before the transfer cutoff.",
+    "Payroll amendment requests require manager approval and HR confirmation of employee status.",
 ]
 
 SEED: list[dict] = [{"text": t, "provenance": "trusted"} for t in _POLICY_LINES]
