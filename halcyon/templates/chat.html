@@ -412,10 +412,11 @@
     sidebar.appendChild(h);
     const mods = TAB_MODULES[tab];
     if (mods.length === 0) {
-      // CHAIN: no per-session toggles here, by design -- the capstone's five
-      // SEC_* flags are process-level (see the CHAIN learn primer), so an
-      // instructor flips one and the whole room re-runs against it. Explain
-      // that so the empty sidebar reads as a deliberate teaching point.
+      // CHAIN: no per-session toggles here, by design -- the capstone's one
+      // flag, SEC_SECRET_SCANNING (see the CHAIN learn primer), is
+      // process-level, so an instructor flips it and the whole room re-runs
+      // against it. Explain that so the empty sidebar reads as a deliberate
+      // teaching point.
       const note = document.createElement("p");
       note.className = "sb-note";
       note.textContent = "Capstone guards are process-level (env flags), not per-session toggles — the instructor flips one and the room re-runs to see the break.";
@@ -832,6 +833,15 @@
         li.appendChild(span);
         reviewSources.appendChild(li);
       }
+      // Bank a durable pass the instant it's earned, not only when the
+      // participant separately clicks Validate below. This panel
+      // deliberately shows neither the model's reply nor its tool calls, so
+      // Validate is otherwise the only signal a transfer fired -- and a
+      // redeploy between "it fired" and "they clicked it" would rotate the
+      // assigned account and turn a genuine win into a permanent false
+      // fail. Fire-and-forget and silent: it must never surface as a hint
+      // that a transfer did or didn't happen.
+      fetch("/validate/chain?session=" + encodeURIComponent(sid)).catch(() => {});
     } catch (err) {
       reviewSources.textContent = "";
       const li = document.createElement("li");

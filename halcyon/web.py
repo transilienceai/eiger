@@ -22,7 +22,7 @@ from halcyon.kb import KnowledgeBase
 from halcyon.session_state import InMemorySessionState, SessionState
 from halcyon.llm import LLM, OllamaProvider, ToolLLM
 from halcyon.store import Store
-from halcyon.treasury_state import TreasuryProvider
+from halcyon.treasury_state import TreasuryProvider, TreasurySession
 from halcyon.validators import chain as chain_validator
 from halcyon.validators import m1, m2, m3, m4, m5, m6, m7, m8
 
@@ -180,6 +180,36 @@ def create_app(
             )
         return treasury_kb_for(session_id)
 
+    def _seed_treasury_bank(session_id: str, ts: TreasurySession) -> None:
+        """Seed the Bank with the two accounts the capstone actually reasons
+        about: the numeric attacker_account TreasuryProvider assigned this
+        session, and its scenario's own legit_account (treasury_corpus.py).
+
+        bank_fixtures.seed_for() only knows the generic acct-me/acct-victim/
+        acct-attacker triad M5-M7 use, so without this bank.get(to) is always
+        None for both in production and transfer_funds's credit never lands
+        -- even though a participant who cracks the scenario is told their
+        money moved. Idempotent (only fills in what's missing), so it is
+        safe to call on every access, not just at mint: a reset rotates
+        attacker_account, and the next call seeds the new one without
+        disturbing a balance an earlier transfer already changed.
+        """
+        bank = bank_for(session_id)
+        scenario = treasury_corpus.SCENARIOS[ts.scenario]
+        for acct_id, owner in (
+            (ts.attacker_account, session_id),
+            (scenario.legit_account, "treasury-desk"),
+        ):
+            if bank.get(acct_id) is None:
+                bank.seed([{"id": acct_id, "owner_session": owner, "balance": 0, "email": ""}])
+
+    def _treasury(session_id: str) -> TreasurySession:
+        """Resolve this session's treasury state and ensure the Bank carries
+        the accounts it reasons about -- see _seed_treasury_bank."""
+        ts = treasury(session_id)
+        _seed_treasury_bank(session_id, ts)
+        return ts
+
     def _mcfg(
         session_id: str, p: str | None = None, m: str | None = None, k: str | None = None
     ) -> tuple[str | None, str | None, str | None]:
@@ -276,7 +306,7 @@ def create_app(
             # transfer, including the benign one, so accepting an
             # attacker_account from the caller would let a forged query
             # string manufacture a pass.
-            return chain_validator.validate(store, session, treasury(session).attacker_account)
+            return chain_validator.validate(store, session, _treasury(session).attacker_account)
         validator = _VALIDATORS.get(module)
         if validator is None:
             return {"error": f"unknown module {module}"}
@@ -295,9 +325,15 @@ def create_app(
             # them with a rotated key, a rotated account, and a stale,
             # un-reseeded corpus -- the half-reset this ordering avoids.
             kb = _treasury_kb(body.session_id)
-            treasury.reset(body.session_id)
+            ts = treasury.reset(body.session_id)
             kb.clear()
             kb.seed(treasury_corpus.SEED)
+            # Re-seed the Bank for the freshly rotated account/scenario pair
+            # -- see _seed_treasury_bank. Without this, a reset leaves the
+            # Bank holding only the PREVIOUS attacker_account/legit_account,
+            # so the newly assigned pair silently has nowhere for credit to
+            # land until something else happens to call _treasury() first.
+            _seed_treasury_bank(body.session_id, ts)
             return {"status": "reset", "module": "chain"}
         if module in ("m1", "m2"):
             sess.clear_history(body.session_id, "chat")
@@ -494,21 +530,21 @@ def create_app(
 
     @app.get("/source/blob")
     def source_blob(session: str, path: str) -> dict:
-        ts = treasury(session)
+        ts = _treasury(session)
         content = guards.scrub_secrets(
             source_browser.blob(path, ts.ingest_key), ts.ingest_key, settings)
         return {"path": path, "content": content}
 
     @app.get("/treasury/brief")
     def treasury_brief(session: str) -> dict:
-        ts = treasury(session)
+        ts = _treasury(session)
         scenario = treasury_corpus.SCENARIOS[ts.scenario]
         return {"brief": scenario.brief, "amount": scenario.amount,
-                "attacker_account": ts.attacker_account, "ingest_hint": False}
+                "attacker_account": ts.attacker_account}
 
     @app.post("/ingest/docs")
     def ingest_doc(body: IngestIn) -> dict:
-        ts = treasury(body.session_id)
+        ts = _treasury(body.session_id)
         if body.key != ts.ingest_key:
             return {"ok": False, "reason": "invalid ingest key", "chunk_id": ""}
         audit.record(store, body.session_id, "chain", audit.INGEST_KEY_ACCEPTED,
@@ -536,10 +572,30 @@ def create_app(
     def treasury_review(body: ReviewIn) -> dict:
         tool_llm = tool_llm_factory(
             *_mcfg(body.session_id, body.provider, body.model, body.api_key))
+        ts = _treasury(body.session_id)
         reply, sources, calls = treasury_agent.review(
-            tool_llm, body.session_id, treasury(body.session_id),
+            tool_llm, body.session_id, ts,
             _treasury_kb(body.session_id), bank_for(body.session_id), store, settings)
-        return {"reply": reply, "sources": sources,
-                "tool_calls": [{"name": n, "args": a} for n, a, _ in calls]}
+        # Bank a durable pass the moment it's earned, in the same request
+        # that executed the transfer -- not lazily, only when a participant
+        # later visits /validate/chain. TreasurySession is in-process and
+        # un-persisted, so a redeploy between "the transfer landed" and "the
+        # participant clicked Validate" rotates the assigned account and
+        # would otherwise turn a genuine win into a permanent false fail,
+        # recoverable only by redoing the whole attack. chain_validator.
+        # validate is idempotent (tests/test_validator_chain.py) -- calling
+        # it here has no effect beyond the durable marker itself when
+        # nothing was earned this call.
+        chain_validator.validate(store, body.session_id, ts.attacker_account)
+        # `reply` is a live echo channel: the model that produced it holds
+        # the full unredacted seeded policy text in its system prompt. The
+        # UI only ever reads it to detect the "<error: ...>" transport
+        # sentinel (a backend/model failure), so that's the only case it's
+        # returned at all -- never the model's actual decision text.
+        result: dict = {"sources": sources,
+                        "tool_calls": [{"name": n, "args": a} for n, a, _ in calls]}
+        if reply.startswith("<error:"):
+            result["reply"] = reply
+        return result
 
     return app

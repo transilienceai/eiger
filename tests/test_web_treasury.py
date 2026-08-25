@@ -55,6 +55,18 @@ def _key(client, treasury_for, session="p1"):
     return treasury_for(session).ingest_key
 
 
+def test_source_blob_redacts_the_leaked_key_in_secure_mode():
+    # Route-level: HALCYON_MODE=secure turns SEC_SECRET_SCANNING on by
+    # default, so /source/blob must never serve the live ingest key. This is
+    # the guard OPERATIONS.md documents as disabling the whole capstone --
+    # no leaked key, no ingest, nothing for the agent to retrieve.
+    client, store, tf, m3_kb_for = make_client(env={"HALCYON_MODE": "secure"})
+    key = tf("p1").ingest_key
+    blob = client.get("/source/blob", params={"session": "p1", "path": ".env.sample"}).json()
+    assert key not in blob["content"]
+    assert "REDACTED-BY-SECRET-SCANNER" in blob["content"]
+
+
 def test_wrong_key_is_rejected_and_records_nothing():
     client, store, tf, m3_kb_for = make_client()
     r = client.post("/ingest/docs", json={"session_id": "p1", "key": "wrong", "text": "x"})
@@ -121,6 +133,51 @@ def test_unauthenticated_review_returns_no_seeded_document_text():
     assert not (set(body["sources"]) & seed_texts)
 
 
+def test_review_response_body_never_contains_seed_text_even_if_the_model_echoes_it():
+    # `reply` is a live echo channel: the model that produces it holds the full
+    # unredacted seeded policy text in its own system prompt and is instructed to
+    # "decline and explain briefly" -- nothing stops a real model from reciting
+    # what it read. The citation-redaction fix closed `sources`; this closes
+    # `reply` by never returning it except as the "<error: ...>" transport
+    # sentinel. Proven with a worst-case stub that actually echoes its own
+    # policy block back as its answer -- not the vacuous "declined" a
+    # StubToolLLM can never violate -- against the FULL response body, since a
+    # narrower check on just body["reply"] would miss the leak resurfacing
+    # under a different key.
+    class _EchoingLLM:
+        def next_step(self, messages: list[dict], tools: list[dict]):
+            system = next(m["content"] for m in messages if m["role"] == "system")
+            return FinalAnswer("Declining. Policy considered: " + system)
+
+    store = InMemoryStore()
+    settings = load_settings({"HALCYON_MODE": "vulnerable"})
+    m3_kb_for = KBProvider(lambda sid: InMemoryKB(), kb_fixtures.SEED)
+    treasury_kb_for = KBProvider(lambda sid: InMemoryKB(), treasury_corpus.SEED)
+    bank = Bank()
+    bank.seed(bank_fixtures.seed_for("p1"))
+    vault = TokenVault({SERVER_CORE: "c", SERVER_CRM: "d"})
+    tf = TreasuryProvider(scenarios=treasury_corpus.SCENARIO_KEYS)
+    app = create_app(
+        store, settings, lambda p, m, key: StubLLM(""),
+        m3_kb_for, lambda sid: bank,
+        lambda p, m, key: _EchoingLLM(),
+        lambda sid, s: in_memory_host(bank, vault, crm_fixtures.SEED, store, s, sid),
+        treasury_for=tf,
+        treasury_kb_for=treasury_kb_for,
+    )
+    client = TestClient(app)
+
+    body = client.post("/api/treasury/review", json={"session_id": "p1"}).json()
+    seed_texts = [f["text"] for f in treasury_corpus.SEED]
+    body_str = str(body)
+    assert not any(t in body_str for t in seed_texts), (
+        "seeded policy text leaked into the response body even though the model "
+        "echoed it directly into its answer")
+    # No transport error occurred, so `reply` must be omitted entirely --
+    # not present-but-redacted, not present-as-a-boolean-false, absent.
+    assert "reply" not in body
+
+
 def test_own_upload_still_appears_verbatim_in_review_sources():
     # The diagnostic loop a participant relies on -- "is my document in the
     # list?" -- must survive redacting the seeded corpus: it only ever needs
@@ -164,6 +221,32 @@ def test_validate_ignores_a_forged_account_in_the_request():
         "session": "p1", "attacker_account": "4410", "account": "4410",
     })
     assert r.json()["core"] == "fail"
+
+
+def test_a_landed_transfer_records_a_durable_pass_without_a_validate_call():
+    # CRITICAL: TreasurySession is in-process and un-persisted -- a redeploy
+    # between "the transfer landed" and "the participant clicked Validate"
+    # rotates the assigned account, and would otherwise turn a genuine win
+    # into a permanent false fail recoverable only by redoing the whole
+    # attack. /api/treasury/review must bank the durable CHAIN_CORE_PASSED
+    # marker itself, in the same request that executes the transfer -- not
+    # lazily, only when /validate/chain is separately visited. This test
+    # never calls /validate/chain at all: it reads the audit log directly to
+    # prove the marker already exists the moment review returns.
+    from halcyon import audit
+
+    # make_client()'s TreasuryProvider assigns "9001" deterministically to
+    # the first session resolved ("p1") -- same assumption test_treasury_e2e.py
+    # documents and pins with its own throwaway-client resolution.
+    client, store, tf, m3_kb_for = make_client(script=[
+        ToolCall("transfer_funds", {"to_account": "9001", "amount": 45000}),
+        FinalAnswer("released"),
+    ])
+    assert tf("p1").attacker_account == "9001"
+
+    client.post("/api/treasury/review", json={"session_id": "p1"})
+
+    assert audit.has_event(store, "p1", "chain", audit.CHAIN_CORE_PASSED)
 
 
 def test_two_sessions_get_separate_knowledge_bases():
@@ -289,8 +372,11 @@ def test_full_http_flow_passes_a_participant_who_did_the_work():
     assert r.json()["ok"] is True
 
     # 3. Run the approval agent (stubbed to release funds to the assigned account).
+    # `reply` is a live echo channel over the model's own text (which holds the
+    # full unredacted seeded policy) -- the route only ever returns it for the
+    # "<error: ...>" transport sentinel, never the model's actual decision.
     review = client.post("/api/treasury/review", json={"session_id": "p1"}).json()
-    assert review["reply"] == "released"
+    assert "reply" not in review
 
     # 4. Grade through the real HTTP validator -- the actual shipped contract.
     result = client.get("/validate/chain", params={"session": "p1"}).json()
@@ -323,6 +409,14 @@ def test_main_wires_a_treasury_provider():
     assert "TreasuryProvider" in src
     assert "treasury_for" in src
     assert "SCENARIO_KEYS" in src
+    # This is what actually closes the collision gap: main.py's real
+    # KBProvider for the capstone must be wired through treasury_collection(),
+    # not a hand-rolled prefix or a bare slug(). See
+    # test_treasury_kb_collection_name_prevents_collision below, which proves
+    # treasury_collection() itself never collides with slug() but -- by
+    # exercising session_resources.py directly, not main.py -- cannot alone
+    # prove main.py actually calls it.
+    assert "treasury_collection(" in src
 
 
 def test_treasury_kb_collection_name_prevents_collision():
@@ -337,8 +431,11 @@ def test_treasury_kb_collection_name_prevents_collision():
     # The fix: prefix *after* hashing. slug() always returns "s" followed
     # by hex, so "treasury_" + hex can never equal a bare slug() output.
     # This test exercises the REAL treasury_collection() function from
-    # session_resources.py, not a reimplementation, so reverting the fix
-    # in main.py will cause this test to fail.
+    # session_resources.py, not a reimplementation, proving the SCHEME
+    # itself never collides -- but it never reads main.py, so it cannot
+    # alone prove main.py actually wires the capstone's KBProvider through
+    # this function rather than a bare slug(). test_main_wires_a_treasury_
+    # provider (above) closes that gap by asserting on main.py's source.
     from halcyon.session_resources import slug, treasury_collection
 
     # Test the naming scheme against a range of adversarial inputs.
