@@ -12,10 +12,11 @@ CORE_EVENTS: dict[str, list[str]] = {
     "m6": [audit.MCP_POISONED_INVOCATION],
     "m7": [audit.INTER_AGENT_INJECTION_PROPAGATED, audit.UNAUTHORIZED_APPROVAL],
     "m8": [audit.GUARDRAIL_BYPASSED],
-    # S10 capstone: keyed on the durable CHAIN_CORE_PASSED marker (written once by
-    # validators.chain.validate on a genuine pass), not a raw stage event -- that's
-    # the correct signal for "this session cracked the whole chain," and it stays
-    # true even across a redeploy that rotates vault_master (see validators/chain.py).
+    # S11 treasury-heist capstone: keyed on the durable CHAIN_CORE_PASSED marker
+    # (written once by validators.chain.validate on a genuine pass), not a raw
+    # stage event -- that's the correct signal for "this session cracked the
+    # whole chain," and it stays true even across a redeploy that rotates the
+    # session's assigned attacker_account (see validators/chain.py).
     "chain": [audit.CHAIN_CORE_PASSED],
 }
 

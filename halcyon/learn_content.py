@@ -595,7 +595,7 @@ LEARN: dict[str, dict] = {
                     "This runs on every file the source browser serves, keyed on the session's own live secret value — not a fixed string to match against.",
                     "With `SEC_SECRET_SCANNING` on, any file content containing that live value gets it replaced with a static marker before the browser ever sees it.",
                     "Off, files are served exactly as checked in — whatever a contractor left behind stays exactly where it was left.",
-                    "Like the capstone's other guards, this flag is process-level, not a per-session toggle — an instructor sets it for the whole room at once.",
+                    "This flag is process-level, not a per-session toggle — an instructor sets it for the whole room at once.",
                 ],
             },
         ],

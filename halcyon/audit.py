@@ -32,8 +32,9 @@ TREASURY_TRANSFER_EXECUTED = "treasury_transfer_executed"
 
 # Not a stage — a durable pass marker the chain validator writes to the
 # audit log itself, so a stored pass survives a stale re-validate (e.g. a
-# redeploy rotating vault_master) but is still genuinely retracted by a
-# module_reset, which drops every event before it, including this one.
+# redeploy rotating the session's assigned attacker_account) but is still
+# genuinely retracted by a module_reset, which drops every event before it,
+# including this one.
 CHAIN_CORE_PASSED = "chain_core_passed"
 
 
