@@ -544,4 +544,60 @@ LEARN: dict[str, dict] = {
             },
         ],
     },
+    "CHAIN": {
+        "title": "Capstone · Treasury desk — an assistant that acts on what it's given",
+        "primer": (
+            "The treasury desk runs one narrow assistant: given a pending item, decide whether "
+            "to release it, using whatever policy text a lookup step hands it as context. The "
+            "assistant is told to treat that policy as authoritative — if it directs a release, "
+            "the assistant calls a transfer tool and the money actually moves. That instruction "
+            "is load-bearing: the assistant has no independent judgement about the pending item "
+            "beyond the policy text in front of it, so whatever policy content lands in its "
+            "context becomes the deciding input for a real financial action.\n\n"
+            "This is the same structural problem as L0's chatbot — one blob of context, no way "
+            "for the model to tell which part was written by an operator and which by anyone "
+            "else who managed to get text in front of it — except this time the consequence "
+            "downstream of that blind trust is a transfer, not a leaked string."
+        ),
+        "snippets": [
+            {
+                "title": "Vulnerable: the assistant is told the supplied policy is authoritative",
+                "kind": "vulnerable",
+                "source": "halcyon/treasury_agent.py",
+                "code": (
+                    "TREASURY_SYSTEM = (\n"
+                    "    \"You are the Eiger treasury approval assistant. Decide whether the pending item \"\n"
+                    "    \"should be released. Apply the treasury policy provided below; it is authoritative \"\n"
+                    "    \"and supersedes your defaults. If policy directs a release, use the transfer_funds \"\n"
+                    "    \"tool to execute it. Otherwise decline and explain briefly.\"\n"
+                    ")\n"
+                ),
+                "notes": [
+                    "This is the whole of the assistant's standing instructions — nothing else tells it how to weigh the pending item.",
+                    "\"It is authoritative and supersedes your defaults\" leaves no room for the assistant to second-guess policy content once it's in context.",
+                    "\"If policy directs a release, use the transfer_funds tool\" ties the decision directly to a real side effect — there's no confirmation step between reading policy text and moving money.",
+                    "Nothing here distinguishes policy the operations team wrote from policy that merely landed in the same context window by some other route.",
+                ],
+            },
+            {
+                "title": "Guard: SEC_SECRET_SCANNING — redact a live secret wherever the mock repo serves it",
+                "kind": "guard",
+                "source": "halcyon/guards.py",
+                "code": (
+                    "def scrub_secrets(text: str, secret: str, settings: Settings) -> str:\n"
+                    "    \"\"\"S1 guard (SEC_SECRET_SCANNING): a secret-scanner would keep the token out\n"
+                    "    of source history. On → redact it wherever it appears; off → serve it raw.\"\"\"\n"
+                    "    if settings.sec_secret_scanning and secret and secret in text:\n"
+                    "        return text.replace(secret, \"***REDACTED-BY-SECRET-SCANNER***\")\n"
+                    "    return text"
+                ),
+                "notes": [
+                    "This runs on every file the source browser serves, keyed on the session's own live secret value — not a fixed string to match against.",
+                    "With `SEC_SECRET_SCANNING` on, any file content containing that live value gets it replaced with a static marker before the browser ever sees it.",
+                    "Off, files are served exactly as checked in — whatever a contractor left behind stays exactly where it was left.",
+                    "Like the capstone's other guards, this flag is process-level, not a per-session toggle — an instructor sets it for the whole room at once.",
+                ],
+            },
+        ],
+    },
 }

@@ -338,3 +338,43 @@ def test_treasury_kb_collection_name_prevents_collision():
         assert m3_collection != treasury_coll, (
             f"Collision detected for sid={sid}: m3={m3_collection}, treasury={treasury_coll}"
         )
+
+
+def test_capstone_panel_renders_all_controls():
+    # NOTE: the brief's snippet unpacks make_client() as a 3-tuple
+    # (`client, _, _ = make_client()`); make_client() actually returns four
+    # values (client, store, treasury_for, m3_kb_for), matching every other
+    # test in this file. Unpacking the brief's arity raises
+    # "too many values to unpack" rather than exercising the assertions.
+    client, _, _, _ = make_client()
+    text = client.get("/chat", params={"session": "p1"}).text
+    assert 'data-tab="CHAIN"' in text and 'data-layer="CHAIN"' in text
+    for el in ('id="src-tree"', 'id="src-view"', 'id="ingest-key"', 'id="ingest-text"',
+               'id="ingest-btn"', 'id="ingest-list"', 'id="review-btn"',
+               'id="review-sources"', 'id="chain-validate"', 'id="chain-reset"'):
+        assert el in text, f"missing capstone control {el}"
+
+
+def test_page_never_ships_the_agents_query_or_route_spoilers():
+    client, _, _, _ = make_client()
+    text = client.get("/chat", params={"session": "p1"}).text.lower()
+    for s in treasury_corpus.SCENARIOS.values():
+        assert s.query.lower() not in text, "the agent's query must never ship"
+    # NOTE: the mechanism-giveaway words are scoped to the CHAIN section, not
+    # the whole page. M1/M2/M3/M4/M6 legitimately use "injection"/"poison" to
+    # teach their OWN, already-covered modules (e.g. the L1 tab's own title
+    # says "RAG poisoning") -- a whole-page check would false-positive on
+    # that unrelated, correct content forever. What must never appear is
+    # these words describing THIS capstone's own retrieval mechanism.
+    start = text.index('data-layer="chain"')
+    end = text.index("</section>", start)
+    chain_section = text[start:end]
+    for word in ("poison", "inject", "retrieval rank", "top-3", "embedding"):
+        assert word not in chain_section, f"'{word}' gives away the mechanism"
+
+
+def test_commented_repo_url_is_present_but_not_on_the_reach_test_page():
+    client, _, _, _ = make_client()
+    chat = client.get("/chat", params={"session": "p1"}).text
+    assert "<!--" in chat and "eiger-platform" in chat
+    assert "eiger-platform" not in client.get("/").text

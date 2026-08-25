@@ -27,7 +27,7 @@ _LAYERS = {
 _ATTACKS = {
     "m1": "operator-token leak", "m2": "stored XSS", "m3": "RAG injection",
     "m4": "poisoned artifact", "m5": "confused-deputy refund", "m6": "MCP tool poisoning",
-    "m7": "inter-agent approval", "m8": "guardrail bypass", "chain": "kill-chain exfil",
+    "m7": "inter-agent approval", "m8": "guardrail bypass", "chain": "treasury policy poisoning",
 }
 
 

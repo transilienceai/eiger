@@ -145,10 +145,13 @@
   ul.src-tree button { padding: .4rem .7rem; font-size: .85rem; cursor: pointer;
     border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); }
   ul.src-tree button:hover { border-color: var(--accent); }
-  ul.src-log { list-style: none; margin: .5rem 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
-  ul.src-log li { padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 8px;
-    background: var(--bg); font-size: .82rem; color: var(--muted); }
-  ul.src-log li code { background: var(--surface-2); }
+  ul.cap-list { list-style: none; margin: .5rem 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+  ul.cap-list li { padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); font-size: .82rem; color: var(--muted); display: flex;
+    justify-content: space-between; align-items: center; gap: .6rem; }
+  ul.cap-list li span { flex: 1; text-align: left; word-break: break-word; }
+  ul.cap-list li button { flex: 0 0 auto; padding: .3rem .6rem; font-size: .78rem; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--text); }
   ul.chain-stages { list-style: none; margin: .3rem 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
   ul.chain-stages li { padding: .4rem .6rem; border-radius: 8px; font-size: .88rem;
     border: 1px solid var(--line); background: var(--surface-2); }
@@ -309,37 +312,35 @@
     </section>
 
     <section data-layer="CHAIN" hidden>{% if learn.get('CHAIN') %}{{ learn_details(learn['CHAIN']) }}{% endif %}
-      <h2>Capstone — Kill Chain (S1–S5)</h2>
-      <p>One campaign, five coupled links: a leaked CI token unlocks a misconfigured deploy hook,
-        whose trusted-source write the privileged ops-agent obeys, loading a poisoned artifact in
-        the build worker, which reads and exfiltrates the vault master secret. Browse the mock repo
-        to find the leak, spend it at the deploy hook, then trigger the ops-agent.</p>
+      <!-- contractor handoff notes mentioned an old mirror at https://git.eiger.internal/archive/eiger-platform -- never decommissioned -->
+      <h2>Capstone — Treasury desk</h2>
+      <div id="chain-brief" class="out"></div>
 
       <h3>Source browser</h3>
-      <p>Browse <code>eiger-platform</code> and its history.</p>
       <ul id="src-tree" class="src-tree"></ul>
-      <ul id="src-log" class="src-log"></ul>
       <pre id="src-view" class="out"></pre>
 
-      <h3>Deploy hook (S2)</h3>
+      <h3>Publish a policy document</h3>
       <div class="row">
-        <input id="deploy-token" type="text" placeholder="CI token" autocomplete="off" />
-        <input id="deploy-url" type="text" placeholder="Artifact URL" autocomplete="off" />
-        <button id="deploy-btn" type="button">Deploy</button>
+        <input id="ingest-key" type="text" placeholder="Ingest key" autocomplete="off" />
       </div>
-      <div id="deploy-out" class="out"></div>
-
-      <h3>Ops-agent (S3 → S5)</h3>
+      <textarea id="ingest-text" rows="4" placeholder="Policy document text…"></textarea>
       <div class="row">
-        <button id="ops-run" type="button">Run the runbook</button>
+        <button id="ingest-btn" type="button">Publish</button>
+        <span id="ingest-status"></span>
       </div>
-      <div id="ops-out" class="out"></div>
+      <ul id="ingest-list" class="cap-list"></ul>
 
-      <h3>Chain tracker</h3>
-      <ul id="chain-stages" class="chain-stages"></ul>
+      <h3>Treasury desk review</h3>
+      <div class="row">
+        <button id="review-btn" type="button">Request review</button>
+      </div>
+      <ul id="review-sources" class="cap-list"></ul>
+
+      <h3>Validate</h3>
       <div class="row">
         <button id="chain-validate" type="button">Validate</button>
-        <button id="chain-reset" type="button">Reset chain</button>
+        <button id="chain-reset" type="button">Reset capstone</button>
       </div>
       <div id="chain-out" class="out"></div>
     </section>
@@ -439,7 +440,7 @@
     tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     sections.forEach((s) => { s.hidden = s.dataset.layer !== tab; });
     renderSidebar(tab);
-    if (tab === "CHAIN") { loadSource(); refreshChain(); }
+    if (tab === "CHAIN") { refreshBrief(); loadSource(); refreshIngestList(); }
   }
   tabs.forEach((t) => { t.onclick = () => activate(t.dataset.tab); });
 
@@ -629,8 +630,22 @@
   };
 
   // ---- CHAIN capstone ----
+  const chainBrief = document.getElementById("chain-brief");
+  async function refreshBrief() {
+    try {
+      const r = await fetch("/treasury/brief?session=" + encodeURIComponent(sid));
+      const data = await r.json();
+      chainBrief.textContent = "";
+      const p1 = document.createElement("p");
+      p1.textContent = data.brief ?? "";
+      const p2 = document.createElement("p");
+      p2.textContent = "Your account: " + (data.attacker_account ?? "");
+      chainBrief.appendChild(p1);
+      chainBrief.appendChild(p2);
+    } catch (err) { chainBrief.textContent = "brief load failed — " + err; }
+  }
+
   const srcTree = document.getElementById("src-tree");
-  const srcLog = document.getElementById("src-log");
   const srcView = document.getElementById("src-view");
   async function loadBlob(path) {
     srcView.textContent = "…";
@@ -643,7 +658,6 @@
   }
   async function loadSource() {
     srcTree.textContent = "";
-    srcLog.textContent = "";
     try {
       const r = await fetch("/source/tree?session=" + encodeURIComponent(sid));
       const data = await r.json();
@@ -656,79 +670,117 @@
         li.appendChild(btn);
         srcTree.appendChild(li);
       }
-      // render the log with the same createElement/textContent pattern as the tree
-      for (const commit of data.log ?? []) {
-        const li = document.createElement("li");
-        li.textContent = (commit.id ?? "") + " — " + (commit.author ?? "") + ": " + (commit.message ?? "");
-        srcLog.appendChild(li);
-      }
     } catch (err) { srcTree.textContent = "tree load failed — " + err; }
   }
 
-  const deployOut = document.getElementById("deploy-out");
-  document.getElementById("deploy-btn").onclick = async () => {
-    deployOut.textContent = "…";
-    const body = {
-      session_id: sid,
-      ci_token: document.getElementById("deploy-token").value,
-      artifact_url: document.getElementById("deploy-url").value,
-    };
-    try {
-      const r = await postJSON("/internal/deploy", body);
-      const data = await r.json();
-      deployOut.textContent = (data.ok ? "ok: " : "denied: ") + data.reason;
-    } catch (err) { deployOut.textContent = "request failed — " + err; }
-    refreshChain();
-  };
-
-  const opsOut = document.getElementById("ops-out");
-  document.getElementById("ops-run").onclick = async () => {
-    opsOut.textContent = "…";
-    try {
-      const r = await postJSON("/api/ops-agent", { session_id: sid, message: "run the runbook" });
-      renderAgent(opsOut, await r.json());
-    } catch (err) { opsOut.textContent = "request failed — " + err; }
-    refreshChain();
-  };
-
-  const chainStages = document.getElementById("chain-stages");
-  const chainOut = document.getElementById("chain-out");
-  const CHAIN_STAGE_LABELS = [
-    ["secret_leak_discovered", "S1 · CI token leaked"],
-    ["misconfig_exploited", "S2 · deploy hook misused"],
-    ["trusted_injection_fired", "S3 · ops-agent obeyed trusted write"],
-    ["malicious_artifact_loaded", "S4 · worker loaded artifact"],
-    ["rce_confirmed", "S5 · vault secret exfiltrated"],
-  ];
-  function renderStageRows(stages) {
-    const frag = document.createDocumentFragment();
-    for (const [key, label] of CHAIN_STAGE_LABELS) {
+  const ingestList = document.getElementById("ingest-list");
+  const ingestStatus = document.getElementById("ingest-status");
+  function renderIngestList(docs) {
+    ingestList.textContent = "";
+    for (const d of docs) {
       const li = document.createElement("li");
-      const passed = !!stages[key];
-      li.className = passed ? "ok" : "bad";
-      li.textContent = (passed ? "✓ " : "✗ ") + label;
-      frag.appendChild(li);
+      const span = document.createElement("span");
+      span.textContent = d.text;
+      const del = document.createElement("button");
+      del.type = "button";
+      del.textContent = "Delete";
+      del.onclick = async () => {
+        await postJSON("/ingest/delete", { session_id: sid, chunk_id: d.id });
+        refreshIngestList();
+      };
+      li.appendChild(span); li.appendChild(del);
+      ingestList.appendChild(li);
     }
-    return frag;
   }
-  chainStages.appendChild(renderStageRows({}));   // static frame, visible before the first fetch
-  async function refreshChain() {
+  async function refreshIngestList() {
+    try {
+      const r = await fetch("/ingest/docs?session=" + encodeURIComponent(sid));
+      const data = await r.json();
+      renderIngestList(data.docs ?? []);
+    } catch (err) { ingestList.textContent = ""; }
+  }
+  document.getElementById("ingest-btn").onclick = async () => {
+    const key = document.getElementById("ingest-key").value;
+    const text = document.getElementById("ingest-text").value;
+    if (!text.trim()) return;
+    ingestStatus.textContent = "…";
+    try {
+      const r = await postJSON("/ingest/docs", { session_id: sid, key: key, text: text });
+      const data = await r.json();
+      ingestStatus.textContent = data.ok ? "published" : (data.reason || "rejected");
+      if (data.ok) document.getElementById("ingest-text").value = "";
+      refreshIngestList();
+    } catch (err) { ingestStatus.textContent = "publish failed — " + err; }
+  };
+
+  const reviewSources = document.getElementById("review-sources");
+  document.getElementById("review-btn").onclick = async () => {
+    reviewSources.textContent = "";
+    const pending = document.createElement("li");
+    pending.textContent = "…";
+    reviewSources.appendChild(pending);
+    try {
+      const r = await postJSON("/api/treasury/review", { session_id: sid });
+      const data = await r.json();
+      reviewSources.textContent = "";
+      const sources = data.sources ?? [];
+      if (sources.length === 0) {
+        const li = document.createElement("li");
+        li.textContent = "no documents informed this decision";
+        reviewSources.appendChild(li);
+      }
+      for (const s of sources) {
+        const li = document.createElement("li");
+        const span = document.createElement("span");
+        span.textContent = s;
+        li.appendChild(span);
+        reviewSources.appendChild(li);
+      }
+    } catch (err) {
+      reviewSources.textContent = "";
+      const li = document.createElement("li");
+      li.textContent = "review failed — " + err;
+      reviewSources.appendChild(li);
+    }
+  };
+
+  const chainOut = document.getElementById("chain-out");
+  async function runValidate() {
+    chainOut.textContent = "…";
     try {
       const r = await fetch("/validate/chain?session=" + encodeURIComponent(sid));
       const data = await r.json();
-      // Build the new rows before touching the DOM: a failed fetch/parse must
-      // leave the existing tracker frame in place rather than blanking it --
-      // orientation shouldn't disappear exactly when something went wrong.
-      chainStages.replaceChildren(renderStageRows(data.stages || {}));
-      chainOut.textContent = "core: " + (data.core ?? "unknown");
+      chainOut.textContent = "";
+      const summary = document.createElement("p");
+      summary.textContent = "core: " + (data.core ?? "unknown");
+      chainOut.appendChild(summary);
+      // Nothing beyond the plain verdict renders unless this session has
+      // already passed -- the per-stage breakdown below is a debrief, built
+      // straight off the keys the server itself returns, not a curated list
+      // shipped ahead of time.
+      if (data.core === "pass" && data.stages) {
+        const ul = document.createElement("ul");
+        ul.className = "chain-stages";
+        for (const [key, passed] of Object.entries(data.stages)) {
+          const li = document.createElement("li");
+          li.className = passed ? "ok" : "bad";
+          li.textContent = (passed ? "✓ " : "✗ ") + key;
+          ul.appendChild(li);
+        }
+        chainOut.appendChild(ul);
+      }
     } catch (err) { chainOut.textContent = "validate failed — " + err; }
   }
-  document.getElementById("chain-validate").onclick = refreshChain;
+  document.getElementById("chain-validate").onclick = runValidate;
   document.getElementById("chain-reset").onclick = async () => {
     try {
       await postJSON("/reset/chain", { session_id: sid });
     } catch (err) { /* fall through to refresh regardless */ }
-    refreshChain();
+    chainOut.textContent = "";
+    reviewSources.textContent = "";
+    srcView.textContent = "";
+    await refreshBrief();
+    await refreshIngestList();
   };
 
   // ---- welcome overlay ----
