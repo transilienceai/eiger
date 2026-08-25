@@ -138,6 +138,7 @@ def create_app(
     mcp_host_factory: MCPHostFactory,
     session_state: SessionState | None = None,
     treasury_for: TreasuryProvider | None = None,
+    treasury_kb_for: Callable[[str], KnowledgeBase] | None = None,
 ) -> FastAPI:
     if settings.expose_openapi:
         app = FastAPI(title="Eiger")
@@ -160,6 +161,24 @@ def create_app(
     sess: SessionState = session_state or InMemorySessionState()
     treasury: TreasuryProvider = treasury_for or TreasuryProvider(
         scenarios=treasury_corpus.SCENARIO_KEYS)
+
+    def _treasury_kb(session_id: str) -> KnowledgeBase:
+        # The capstone gets its own RAG store (design spec, "own scenario, own
+        # store, own agent"). Falling back to kb_for here would silently
+        # reunite it with M3's: the agent would retrieve M3's corpus instead
+        # of treasury_corpus, /reset/chain would wipe M3's KB on every
+        # capstone reset, and M3's unauthenticated /api/kb would become a
+        # free bypass of the ingest-key gate this module exists to teach.
+        # Refuse loudly instead of reintroducing that bug quietly.
+        if treasury_kb_for is None:
+            raise RuntimeError(
+                "create_app() was called without treasury_kb_for: the treasury-heist "
+                "capstone (module \"chain\") requires its own KnowledgeBase provider, "
+                "separate from kb_for (M3's). Wire a second per-session provider seeded "
+                "with treasury_corpus.SEED -- see docs/plans/2026-08-24-"
+                "halcyon-s11-treasury-heist-capstone.md, Task 10."
+            )
+        return treasury_kb_for(session_id)
 
     def _mcfg(
         session_id: str, p: str | None = None, m: str | None = None, k: str | None = None
@@ -268,7 +287,7 @@ def create_app(
         store.write_reset_marker(body.session_id, module)
         if module == "chain":
             treasury.reset(body.session_id)
-            kb = kb_for(body.session_id)
+            kb = _treasury_kb(body.session_id)
             kb.clear()
             kb.seed(treasury_corpus.SEED)
             return {"status": "reset", "module": "chain"}
@@ -489,7 +508,7 @@ def create_app(
         # owner_session must always be the caller's own session id, never blank
         # -- an empty owner_session on a "user"-provenance chunk would be
         # visible to list_own("").
-        chunk = kb_for(body.session_id).add(
+        chunk = _treasury_kb(body.session_id).add(
             body.text, "user", owner_session=body.session_id)
         audit.record(store, body.session_id, "chain", audit.POLICY_DOC_INGESTED,
                      body.session_id, {"chunk": chunk.id})
@@ -497,12 +516,12 @@ def create_app(
 
     @app.get("/ingest/docs")
     def list_docs(session: str) -> dict:
-        docs = kb_for(session).list_own(session)
+        docs = _treasury_kb(session).list_own(session)
         return {"docs": [{"id": c.id, "text": c.text} for c in docs]}
 
     @app.post("/ingest/delete")
     def delete_doc(body: DeleteIn) -> dict:
-        return {"deleted": kb_for(body.session_id).delete_own(
+        return {"deleted": _treasury_kb(body.session_id).delete_own(
             body.session_id, body.chunk_id)}
 
     @app.post("/api/treasury/review")
@@ -511,7 +530,7 @@ def create_app(
             *_mcfg(body.session_id, body.provider, body.model, body.api_key))
         reply, sources, calls = treasury_agent.review(
             tool_llm, body.session_id, treasury(body.session_id),
-            kb_for(body.session_id), bank_for(body.session_id), store, settings)
+            _treasury_kb(body.session_id), bank_for(body.session_id), store, settings)
         return {"reply": reply, "sources": sources,
                 "tool_calls": [{"name": n, "args": a} for n, a, _ in calls]}
 
