@@ -28,9 +28,6 @@ class Settings:
     sec_inter_agent_auth: bool
     sec_guardrails: bool
     sec_secret_scanning: bool
-    sec_ci_least_priv: bool
-    sec_trusted_source_auth: bool
-    sec_worker_sandbox: bool
     ollama_url: str
     ollama_model: str
     database_url: str
@@ -58,9 +55,6 @@ def load_settings(env: Mapping[str, str]) -> Settings:
         sec_inter_agent_auth=_flag(env, "SEC_INTER_AGENT_AUTH", secure),
         sec_guardrails=_flag(env, "SEC_GUARDRAILS", secure),
         sec_secret_scanning=_flag(env, "SEC_SECRET_SCANNING", secure),
-        sec_ci_least_priv=_flag(env, "SEC_CI_LEAST_PRIV", secure),
-        sec_trusted_source_auth=_flag(env, "SEC_TRUSTED_SOURCE_AUTH", secure),
-        sec_worker_sandbox=_flag(env, "SEC_WORKER_SANDBOX", secure),
         ollama_url=env.get("OLLAMA_URL", "http://localhost:11434"),
         ollama_model=env.get("OLLAMA_MODEL", "llama3.1:8b"),
         database_url=env.get("DATABASE_URL", ""),

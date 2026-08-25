@@ -24,12 +24,11 @@ GUARDRAIL_BYPASSED = "guardrail_bypassed"
 GUARDRAIL_HARDENED_BLOCK = "guardrail_hardened_block"
 GUARDRAIL_DECISION = "guardrail_decision"
 
-# S10 kill-chain capstone (module "chain") — ordered exploit events
-SECRET_LEAK_DISCOVERED = "secret_leak_discovered"
-MISCONFIG_EXPLOITED = "misconfig_exploited"
-TRUSTED_INJECTION_FIRED = "trusted_injection_fired"
-MALICIOUS_ARTIFACT_LOADED = "malicious_artifact_loaded"
-RCE_CONFIRMED = "rce_confirmed"
+# S11 treasury-heist capstone (module "chain")
+INGEST_KEY_ACCEPTED = "ingest_key_accepted"
+POLICY_DOC_INGESTED = "policy_doc_ingested"
+POISONED_DOC_RETRIEVED = "poisoned_doc_retrieved"
+TREASURY_TRANSFER_EXECUTED = "treasury_transfer_executed"
 
 # Not a stage — a durable pass marker the chain validator writes to the
 # audit log itself, so a stored pass survives a stale re-validate (e.g. a

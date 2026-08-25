@@ -4,11 +4,10 @@ from halcyon.store import Store
 MODULE = "chain"
 
 ORDER = [
-    audit.SECRET_LEAK_DISCOVERED,
-    audit.MISCONFIG_EXPLOITED,
-    audit.TRUSTED_INJECTION_FIRED,
-    audit.MALICIOUS_ARTIFACT_LOADED,
-    audit.RCE_CONFIRMED,
+    audit.INGEST_KEY_ACCEPTED,
+    audit.POLICY_DOC_INGESTED,
+    audit.POISONED_DOC_RETRIEVED,
+    audit.TREASURY_TRANSFER_EXECUTED,
 ]
 
 
@@ -24,7 +23,7 @@ def validate(store: Store, session_id: str, vault_master: str) -> dict:
         first_id[ORDER[i]] < first_id[ORDER[i + 1]] for i in range(len(ORDER) - 1)
     )
     secret_ok = any(
-        e.event_type == audit.RCE_CONFIRMED and e.details.get("secret") == vault_master
+        e.event_type == audit.TREASURY_TRANSFER_EXECUTED and e.details.get("secret") == vault_master
         for e in events
     )
     core = in_order and secret_ok
