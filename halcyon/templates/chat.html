@@ -664,31 +664,38 @@
   // device, not a security control: nothing here is enforced server-side,
   // and the accepted value below is plain to anyone reading this script.
   // That's fine -- the exercise is finding the comment, not defeating this
-  // check. Accepts the obvious ways someone would retype what they found:
-  // with or without the scheme, with or without the host, and with or
-  // without leading/trailing slashes.
+  // check. Accepts the obvious ways someone would retype or paste what they
+  // found: drag-selecting the comment pulls in trailing prose, so truncate
+  // at the first whitespace right after case/trim normalizing; a git-clone
+  // reflex appends ".git"; a browser tab on the mirror appends "/tree/main";
+  // and the location may be typed with or without its scheme, its host, or
+  // leading/trailing slashes -- including a bare "//host/path" paste, which
+  // is why the leading-slash strip has to run before the host strip below
+  // (a leading "//" would otherwise never expose the host to match).
   const CHAIN_GATE_TARGET = "archive/eiger-platform";
   function normalizeGateInput(raw) {
     let s = (raw || "").trim().toLowerCase();
-    s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");
-    s = s.replace(/^git\.eiger\.internal\/?/, "");
-    s = s.replace(/^\/+/, "").replace(/\/+$/, "");
+    s = s.split(/\s/)[0];                                 // drop anything pasted after the path itself
+    s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");         // strip scheme
+    s = s.replace(/^\/+/, "");                              // strip leading slashes -- before the host strip
+    s = s.replace(/^git\.eiger\.internal\/?/, "");        // strip the known host
+    s = s.replace(/\/+$/, "");                              // strip a trailing slash before the suffix checks below
+    s = s.replace(/\/tree\/[^/]+$/, "");                    // strip a browser "view at ref" suffix (e.g. /tree/main)
+    s = s.replace(/\.git$/, "");                            // strip a git-clone suffix
+    s = s.replace(/\/+$/, "");                              // strip any slash a suffix strip exposed
     return s;
   }
   const chainGate = document.getElementById("chain-gate");
   const chainWorkspace = document.getElementById("chain-workspace");
   const gatePath = document.getElementById("gate-path");
   const gateStatus = document.getElementById("gate-status");
-  let chainUnlocked = false;
   function openChainWorkspace() {
-    chainUnlocked = true;
     chainGate.hidden = true;
     chainWorkspace.hidden = false;
     loadSource();
     refreshIngestList();
   }
   function lockChainWorkspace() {
-    chainUnlocked = false;
     chainGate.hidden = false;
     chainWorkspace.hidden = true;
     gatePath.value = "";
@@ -752,7 +759,13 @@
   async function refreshIngestList() {
     try {
       const r = await fetch("/ingest/docs?session=" + encodeURIComponent(sid));
-      if (!r.ok) { ingestList.textContent = ""; return; }
+      if (!r.ok) {
+        ingestList.textContent = "";
+        const li = document.createElement("li");
+        li.textContent = "couldn't load uploads (" + r.status + ") — try again";
+        ingestList.appendChild(li);
+        return;
+      }
       const data = await r.json();
       renderIngestList(data.docs ?? []);
     } catch (err) {
@@ -798,8 +811,8 @@
       const data = await r.json();
       // A backend/model transport failure still answers 200 with an empty
       // decision but the chunks it would have used -- surface that as its
-      // own state, distinct from "these are the documents that ranked",
-      // so a broken backend never reads as a ranking verdict.
+      // own state, distinct from "these are the documents that informed this
+      // decision", so a broken backend is never read as a real verdict.
       if (typeof data.reply === "string" && data.reply.startsWith("<error:")) {
         const li = document.createElement("li");
         li.textContent = "the desk's assistant backend failed — try again (" + data.reply + ")";

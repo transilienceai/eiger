@@ -379,7 +379,8 @@ def test_page_never_ships_the_agents_query_or_route_spoilers():
     js_start = text.index("---- chain capstone ----")
     js_end = text.index("---- welcome overlay ----", js_start)
     chain_surface = text[section_start:section_end] + text[js_start:js_end]
-    for word in ("poison", "inject", "retrieval rank", "top-3", "embedding"):
+    for word in ("poison", "inject", "retrieval rank", "top-3", "embedding",
+                 "ranks highest", "rank", "k=3", "similarity", "vector"):
         assert word not in chain_surface, f"'{word}' gives away the mechanism"
 
 
@@ -445,14 +446,27 @@ def _extract_gate_normalizer(src: str):
     fn_start = src.index("function normalizeGateInput")
     fn_end = src.index("\n  }", fn_start)
     fn_body = src[fn_start:fn_end]
-    steps = re.findall(r'\.replace\(/(.+?)/(\w*),\s*"([^"]*)"\)', fn_body)
-    # protocol strip, host strip, leading-slash strip, trailing-slash strip
-    assert len(steps) == 4, "expected four .replace() normalization steps"
+    # Walk the function body in source order, picking up every `.split(/../)[0]`
+    # and `.replace(/../, "..")` call as it's encountered -- order matters (the
+    # leading-slash strip has to run before the host strip, for example), so
+    # this replays the exact sequence shipped rather than assuming one.
+    op_re = re.compile(r'\.split\(/(.+?)/\)\[0\]|\.replace\(/(.+?)/(\w*),\s*"([^"]*)"\)')
+    ops = []
+    for m in op_re.finditer(fn_body):
+        if m.group(1) is not None:
+            ops.append(("split", m.group(1).replace("\\/", "/")))
+        else:
+            ops.append(("replace", m.group(2).replace("\\/", "/"), m.group(4)))
+    assert len(ops) == 8, f"expected 1 split + 7 replace steps, found {len(ops)}"
 
     def normalize(raw: str) -> str:
         s = (raw or "").strip().lower()
-        for pattern, _flags, repl in steps:
-            s = re.sub(pattern.replace("\\/", "/"), repl, s, count=1)
+        for op in ops:
+            if op[0] == "split":
+                s = re.split(op[1], s, maxsplit=1)[0]
+            else:
+                _, pattern, repl = op
+                s = re.sub(pattern, repl, s, count=1)
         return s
 
     return normalize, target
@@ -465,14 +479,18 @@ def test_gate_accepts_the_documented_variants_of_the_repo_path():
     normalize, target = _extract_gate_normalizer(src)
     assert target == "archive/eiger-platform"
     accepted = [
-        "archive/eiger-platform",
+        "archive/eiger-platform",                                       # bare path
         "/archive/eiger-platform",
         "archive/eiger-platform/",
         "/archive/eiger-platform/",
-        "git.eiger.internal/archive/eiger-platform",
-        "https://git.eiger.internal/archive/eiger-platform",
+        "git.eiger.internal/archive/eiger-platform",                    # with host
+        "https://git.eiger.internal/archive/eiger-platform",            # with scheme
         "HTTPS://GIT.EIGER.INTERNAL/ARCHIVE/EIGER-PLATFORM",
         "  archive/eiger-platform  ",
+        "archive/eiger-platform -- never decommissioned",               # with trailing junk (drag-selected comment)
+        "archive/eiger-platform.git",                                   # .git suffix (git-clone reflex)
+        "https://git.eiger.internal/archive/eiger-platform/tree/main",  # /tree/main (browser-URL reflex)
+        "//git.eiger.internal/archive/eiger-platform",                  # scheme-relative //host/path
     ]
     for variant in accepted:
         assert normalize(variant) == target, f"{variant!r} should have been accepted"
@@ -503,8 +521,18 @@ def test_gate_rejects_wrong_entries_without_hinting():
     else_branch = handler[handler.index("} else {"):]
     assert "openChainWorkspace" not in else_branch
     assert 'gateStatus.textContent = "Not found."' in else_branch
+    # Read the actual shipped failure string back out of the template --
+    # asserting against a Python literal here (rather than what's extracted)
+    # would pass forever regardless of what the code ships.
+    import re
+
+    msg_m = re.search(r'gateStatus\.textContent = "([^"]*)";', else_branch)
+    assert msg_m, "could not find the gate's failure message in the else branch"
+    failure_message = msg_m.group(1).lower()
     for word in ("archive", "eiger-platform", "git.eiger.internal", "ci.yml", ".env"):
-        assert word not in "not found.", "sanity: the literal failure text carries no hint"
+        assert word not in failure_message, (
+            f"the failure message leaks a hint: {failure_message!r} contains {word!r}"
+        )
 
 
 def test_reset_re_gates_the_workspace():
@@ -524,3 +552,27 @@ def test_reset_re_gates_the_workspace():
     reset_end = src.index("\n  };", reset_start)
     reset_body = src[reset_start:reset_end]
     assert "lockChainWorkspace();" in reset_body
+
+
+def test_ingest_list_failed_fetch_does_not_blank_silently():
+    # Fix round 2: the !r.ok branch in refreshIngestList used to blank the
+    # list on any non-2xx response with no explanation -- exactly the "my
+    # uploads vanished" reading the catch block next to it was already fixed
+    # to avoid, and an invitation to duplicate-republish on top of it. Pin
+    # that the !r.ok branch appends an explanatory <li> like its catch does,
+    # instead of only clearing the container.
+    from pathlib import Path
+
+    src = Path("halcyon/templates/chat.html").read_text()
+    fn_start = src.index("async function refreshIngestList()")
+    fn_end = src.index("\n  }", fn_start)
+    fn_body = src[fn_start:fn_end]
+    ok_start = fn_body.index("if (!r.ok)")
+    catch_start = fn_body.index("} catch (err) {")
+    ok_branch = fn_body[ok_start:catch_start]
+    assert "appendChild" in ok_branch, (
+        "a failed GET must render an explanatory item, not just clear the list"
+    )
+    assert "textContent = \"\";" not in ok_branch.split("appendChild")[-1], (
+        "the explanatory item must not be cleared after being appended"
+    )
