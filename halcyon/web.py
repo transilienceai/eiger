@@ -455,7 +455,7 @@ def create_app(
 
     @app.get("/source/tree")
     def source_tree(session: str) -> dict:
-        return {"tree": source_browser.tree(), "log": source_browser.log()}
+        return {"tree": source_browser.tree()}
 
     @app.get("/source/blob")
     def source_blob(session: str, path: str) -> dict:
