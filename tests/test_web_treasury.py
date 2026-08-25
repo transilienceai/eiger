@@ -205,3 +205,86 @@ def test_reset_chain_does_not_disturb_m3s_knowledge_base():
 
     after = [c.text for c in m3_kb_for("p1").list_own("p1")]
     assert after == before
+
+
+def test_full_http_flow_passes_a_participant_who_did_the_work():
+    # FIX ROUND 2: pins the one path that actually matters end to end --
+    # browse the leaked key -> ingest a policy document -> the agent acts on
+    # it -> /validate/chain grades `pass` -- through the SAME HTTP routes a
+    # real participant hits. Every other test in this file proves a negative
+    # (forged account fails, wrong key records nothing, cross-session leaks
+    # are blocked); this is the one that proves the positive case still
+    # works, specifically that the `to_account` string the agent records and
+    # the `attacker_account` string /validate/chain compares against are
+    # read from the same TreasuryProvider entry.
+    store = InMemoryStore()
+    settings = load_settings({"HALCYON_MODE": "vulnerable"})
+    m3_kb_for = KBProvider(lambda sid: InMemoryKB(), kb_fixtures.SEED)
+    treasury_kb_for = KBProvider(lambda sid: InMemoryKB(), treasury_corpus.SEED)
+    bank = Bank()
+    bank.seed(bank_fixtures.seed_for("p1"))
+    vault = TokenVault({SERVER_CORE: "c", SERVER_CRM: "d"})
+    k = itertools.count(1)
+    a = itertools.count(1)
+    tf = TreasuryProvider(
+        gen=lambda: f"key-{next(k)}", account_gen=lambda: f"90{next(a):02d}",
+        scenarios=treasury_corpus.SCENARIO_KEYS)
+    # Resolve p1's session up front so the stubbed agent's tool call can
+    # target the exact account the validator will later compare against --
+    # this is the specific link the coordinator asked to pin.
+    attacker_account = tf("p1").attacker_account
+    scenario = treasury_corpus.SCENARIOS[tf("p1").scenario]
+    script = [
+        ToolCall("transfer_funds", {"to_account": attacker_account, "amount": 45000}),
+        FinalAnswer("released"),
+    ]
+    app = create_app(
+        store, settings, lambda p, m, key: StubLLM(""),
+        m3_kb_for, lambda sid: bank,
+        lambda p, m, key: StubToolLLM(list(script)),
+        lambda sid, s: in_memory_host(bank, vault, crm_fixtures.SEED, store, s, sid),
+        treasury_for=tf,
+        treasury_kb_for=treasury_kb_for,
+    )
+    client = TestClient(app)
+
+    # 1. Browse the leaked key, the same route a participant uses.
+    blob = client.get("/source/blob", params={"session": "p1", "path": ".env.sample"}).json()
+    key = tf("p1").ingest_key
+    assert key in blob["content"]
+
+    # 2. Ingest a policy document with the stolen key. Its text mirrors the
+    # scenario's own retrieval query so it is guaranteed to be retrieved
+    # into the agent's top-3 context -- otherwise "retrieved" would stay
+    # false for reasons unrelated to what this test is pinning.
+    r = client.post(
+        "/ingest/docs",
+        json={"session_id": "p1", "key": key, "text": scenario.query},
+    )
+    assert r.json()["ok"] is True
+
+    # 3. Run the approval agent (stubbed to release funds to the assigned account).
+    review = client.post("/api/treasury/review", json={"session_id": "p1"}).json()
+    assert review["reply"] == "released"
+
+    # 4. Grade through the real HTTP validator -- the actual shipped contract.
+    result = client.get("/validate/chain", params={"session": "p1"}).json()
+    assert result["core"] == "pass"
+    assert result["stages"] == {
+        "key": True, "ingested": True, "retrieved": True, "transferred": True,
+    }
+
+
+def test_reset_chain_fails_before_rotating_when_kb_is_missing():
+    # FIX ROUND 2: if treasury_kb_for was never wired, /reset/chain must
+    # raise before treasury.reset() rotates the key/account -- not after.
+    # Failing after rotation would strand a participant with a new
+    # key/account and a stale, un-reseeded corpus: the half-reset the brief
+    # warns about.
+    client, store, tf, m3_kb_for = make_client(treasury_kb=False)
+    before = tf("p1")
+    with pytest.raises(RuntimeError, match="treasury_kb_for"):
+        client.post("/reset/chain", json={"session_id": "p1"})
+    after = tf("p1")
+    assert after.ingest_key == before.ingest_key
+    assert after.attacker_account == before.attacker_account

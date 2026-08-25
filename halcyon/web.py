@@ -286,8 +286,16 @@ def create_app(
     def reset(module: str, body: ResetIn) -> dict:
         store.write_reset_marker(body.session_id, module)
         if module == "chain":
-            treasury.reset(body.session_id)
+            # Resolve the KB provider before mutating anything else: if
+            # treasury_kb_for was never wired, _treasury_kb() raises here,
+            # before the key/account are rotated -- not after. Failing here
+            # leaves the participant's existing key/account/corpus intact
+            # (modulo the generic reset marker above, shared by every
+            # module); failing after treasury.reset() would instead strand
+            # them with a rotated key, a rotated account, and a stale,
+            # un-reseeded corpus -- the half-reset this ordering avoids.
             kb = _treasury_kb(body.session_id)
+            treasury.reset(body.session_id)
             kb.clear()
             kb.seed(treasury_corpus.SEED)
             return {"status": "reset", "module": "chain"}
