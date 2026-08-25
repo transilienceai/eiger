@@ -1493,8 +1493,14 @@ git commit -m "feat(chain): treasury ingest, review, brief and reset endpoints"
 > capstone has nothing to compete against; `/reset/chain` re-seeds that store and wipes M3's; M3's
 > `/api/kb` writes into the store the agent reads; and the ingest bypass the spec's isolation
 > decision exists to close silently reopens. Wire a second provider:
-> `_treasury_kb_for = KBProvider(lambda sid: ChromaKB(collection=slug("treasury-" + sid)), treasury_corpus.SEED)`
-> — note the distinct collection prefix, or the two providers collide inside Chroma.
+> `_treasury_kb_for = KBProvider(lambda sid: ChromaKB(collection="treasury_" + slug(sid)), treasury_corpus.SEED)`
+>
+> **Prefix AFTER hashing, never before.** `slug("treasury-" + sid)` looks equivalent and is not:
+> hashing a concatenation destroys the boundary, so a participant who sets their session id to
+> `"treasury-p1"` resolves their M3 store to participant p1's treasury collection — and every route
+> takes an unauthenticated session id, so `/api/kb` writes into their corpus and `/reset/m3` wipes
+> it. `slug()` always returns `"s"` + hex, so a `"treasury_"`-prefixed name can never collide with a
+> bare one. (This exact bug shipped in an earlier draft of this amendment and was caught in review.)
 
 - [ ] **Step 1: Write the failing test**
 
