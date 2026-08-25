@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from halcyon import (
     agent, audit, bank_fixtures, capstone, dispute_pipeline, guards, halo, kb_fixtures,
-    learn_content, m4_answers, rag, source_browser,
+    learn_content, m4_answers, rag, source_browser, treasury_agent, treasury_corpus,
 )
 from halcyon.bank import Bank
 from halcyon.config import MODULE_FLAGS, Settings, effective_settings
@@ -22,6 +22,8 @@ from halcyon.kb import KnowledgeBase
 from halcyon.session_state import InMemorySessionState, SessionState
 from halcyon.llm import LLM, OllamaProvider, ToolLLM
 from halcyon.store import Store
+from halcyon.treasury_state import TreasuryProvider
+from halcyon.validators import chain as chain_validator
 from halcyon.validators import m1, m2, m3, m4, m5, m6, m7, m8
 
 if TYPE_CHECKING:
@@ -96,6 +98,24 @@ class ConfigIn(BaseModel):
     api_key: str | None = None
 
 
+class IngestIn(BaseModel):
+    session_id: str
+    key: str
+    text: str
+
+
+class DeleteIn(BaseModel):
+    session_id: str
+    chunk_id: str
+
+
+class ReviewIn(BaseModel):
+    session_id: str
+    provider: str | None = None
+    model: str | None = None
+    api_key: str | None = None
+
+
 _VALIDATORS = {
     "m1": m1.validate,
     "m2": m2.validate,
@@ -117,6 +137,7 @@ def create_app(
     tool_llm_factory: ToolLLMFactory,
     mcp_host_factory: MCPHostFactory,
     session_state: SessionState | None = None,
+    treasury_for: TreasuryProvider | None = None,
 ) -> FastAPI:
     if settings.expose_openapi:
         app = FastAPI(title="Eiger")
@@ -137,6 +158,8 @@ def create_app(
         )
 
     sess: SessionState = session_state or InMemorySessionState()
+    treasury: TreasuryProvider = treasury_for or TreasuryProvider(
+        scenarios=treasury_corpus.SCENARIO_KEYS)
 
     def _mcfg(
         session_id: str, p: str | None = None, m: str | None = None, k: str | None = None
@@ -227,9 +250,14 @@ def create_app(
 
     @app.get("/validate/{module}")
     def validate(module: str, session: str) -> dict:
-        # placeholder between S10's removal and S11's wiring (Task 9)
         if module == "chain":
-            return {"core": "fail", "stages": {}}
+            # The account compared against is resolved server-side from the
+            # session's own TreasuryProvider state -- never from a request
+            # field. TREASURY_TRANSFER_EXECUTED is recorded for every
+            # transfer, including the benign one, so accepting an
+            # attacker_account from the caller would let a forged query
+            # string manufacture a pass.
+            return chain_validator.validate(store, session, treasury(session).attacker_account)
         validator = _VALIDATORS.get(module)
         if validator is None:
             return {"error": f"unknown module {module}"}
@@ -238,9 +266,11 @@ def create_app(
     @app.post("/reset/{module}")
     def reset(module: str, body: ResetIn) -> dict:
         store.write_reset_marker(body.session_id, module)
-        # placeholder chain reset between S10's removal and S11's wiring (Task 9)
         if module == "chain":
-            store.write_reset_marker(body.session_id, "chain")
+            treasury.reset(body.session_id)
+            kb = kb_for(body.session_id)
+            kb.clear()
+            kb.seed(treasury_corpus.SEED)
             return {"status": "reset", "module": "chain"}
         if module in ("m1", "m2"):
             sess.clear_history(body.session_id, "chat")
@@ -437,13 +467,52 @@ def create_app(
 
     @app.get("/source/blob")
     def source_blob(session: str, path: str) -> dict:
-        # placeholder ci_token between S10's removal and S11's wiring (Task 9)
-        ci_token = ""
-        content = guards.scrub_secrets(source_browser.blob(path, ci_token),
-                                       ci_token, settings)
-        if path == source_browser.LEAK_PATH and ci_token and ci_token in content:
-            audit.record(store, session, "chain", audit.INGEST_KEY_ACCEPTED,
-                         session, {"path": path})
+        ts = treasury(session)
+        content = guards.scrub_secrets(
+            source_browser.blob(path, ts.ingest_key), ts.ingest_key, settings)
         return {"path": path, "content": content}
+
+    @app.get("/treasury/brief")
+    def treasury_brief(session: str) -> dict:
+        ts = treasury(session)
+        scenario = treasury_corpus.SCENARIOS[ts.scenario]
+        return {"brief": scenario.brief, "amount": scenario.amount,
+                "attacker_account": ts.attacker_account, "ingest_hint": False}
+
+    @app.post("/ingest/docs")
+    def ingest_doc(body: IngestIn) -> dict:
+        ts = treasury(body.session_id)
+        if body.key != ts.ingest_key:
+            return {"ok": False, "reason": "invalid ingest key", "chunk_id": ""}
+        audit.record(store, body.session_id, "chain", audit.INGEST_KEY_ACCEPTED,
+                     body.session_id, {})
+        # owner_session must always be the caller's own session id, never blank
+        # -- an empty owner_session on a "user"-provenance chunk would be
+        # visible to list_own("").
+        chunk = kb_for(body.session_id).add(
+            body.text, "user", owner_session=body.session_id)
+        audit.record(store, body.session_id, "chain", audit.POLICY_DOC_INGESTED,
+                     body.session_id, {"chunk": chunk.id})
+        return {"ok": True, "reason": "published", "chunk_id": chunk.id}
+
+    @app.get("/ingest/docs")
+    def list_docs(session: str) -> dict:
+        docs = kb_for(session).list_own(session)
+        return {"docs": [{"id": c.id, "text": c.text} for c in docs]}
+
+    @app.post("/ingest/delete")
+    def delete_doc(body: DeleteIn) -> dict:
+        return {"deleted": kb_for(body.session_id).delete_own(
+            body.session_id, body.chunk_id)}
+
+    @app.post("/api/treasury/review")
+    def treasury_review(body: ReviewIn) -> dict:
+        tool_llm = tool_llm_factory(
+            *_mcfg(body.session_id, body.provider, body.model, body.api_key))
+        reply, sources, calls = treasury_agent.review(
+            tool_llm, body.session_id, treasury(body.session_id),
+            kb_for(body.session_id), bank_for(body.session_id), store, settings)
+        return {"reply": reply, "sources": sources,
+                "tool_calls": [{"name": n, "args": a} for n, a, _ in calls]}
 
     return app
