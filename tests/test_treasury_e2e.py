@@ -40,9 +40,12 @@ def test_full_chain_passes_when_the_transfer_lands_on_the_assigned_account():
         "session_id": "p1", "key": key, "text": scenario.query})
     assert r.json()["ok"] is True
 
-    # 3. the agent acts (stubbed to release to the assigned account)
+    # 3. the agent acts (stubbed to release to the assigned account). `reply`
+    # is a live echo channel over the model's own text (which holds the full
+    # unredacted seeded policy), so the route only ever returns it for the
+    # "<error: ...>" transport sentinel -- never the model's decision text.
     review = client.post("/api/treasury/review", json={"session_id": "p1"}).json()
-    assert review["reply"] == "released"
+    assert "reply" not in review
 
     # 4. grade through the real HTTP validator
     r = client.get("/validate/chain", params={"session": "p1"}).json()

@@ -107,9 +107,20 @@ def test_unknown_tool_name_does_nothing():
 
 
 def test_the_agents_query_is_never_in_the_reply_or_citations():
+    """A stub that always returns the literal string "declined" can never
+    violate this assertion, whatever it claims to demonstrate. Use an LLM
+    that echoes its own full system prompt -- which DOES carry real seeded
+    policy text -- back as its answer, so the query's absence is proven
+    against real content it could actually have leaked, not a canned
+    placeholder that could never fail."""
     kb, bank, store, session = _fixture()
-    llm = StubToolLLM([FinalAnswer("declined")])
-    reply, cited, _ = treasury_agent.review(llm, "p1", session, kb, bank, store, VULN)
+
+    class _EchoingLLM:
+        def next_step(self, messages: list[dict], tools: list[dict]):
+            system = next(m["content"] for m in messages if m["role"] == "system")
+            return FinalAnswer("Declining. Policy considered: " + system)
+
+    reply, cited, _ = treasury_agent.review(_EchoingLLM(), "p1", session, kb, bank, store, VULN)
     q = treasury_corpus.SCENARIOS["vendor"].query
     assert q not in reply
     assert all(q not in c for c in cited)
