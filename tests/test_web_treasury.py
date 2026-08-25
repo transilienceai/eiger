@@ -311,7 +311,10 @@ def test_treasury_kb_collection_name_prevents_collision():
     #
     # The fix: prefix *after* hashing. slug() always returns "s" followed
     # by hex, so "treasury_" + hex can never equal a bare slug() output.
-    from halcyon.session_resources import slug
+    # This test exercises the REAL treasury_collection() function from
+    # session_resources.py, not a reimplementation, so reverting the fix
+    # in main.py will cause this test to fail.
+    from halcyon.session_resources import slug, treasury_collection
 
     # Test the naming scheme against a range of adversarial inputs.
     test_cases = [
@@ -326,12 +329,12 @@ def test_treasury_kb_collection_name_prevents_collision():
 
     for sid in test_cases:
         m3_collection = slug(sid)
-        treasury_collection = "treasury_" + slug(sid)
+        treasury_coll = treasury_collection(sid)
         # M3's collection starts with hex hash (after "s"), never with "treasury_"
         assert m3_collection.startswith("s"), f"M3 collection should start with 's': {m3_collection}"
         # Treasury's collection always starts with "treasury_"
-        assert treasury_collection.startswith("treasury_"), f"Treasury collection should start with 'treasury_': {treasury_collection}"
+        assert treasury_coll.startswith("treasury_"), f"Treasury collection should start with 'treasury_': {treasury_coll}"
         # They must never be equal
-        assert m3_collection != treasury_collection, (
-            f"Collision detected for sid={sid}: m3={m3_collection}, treasury={treasury_collection}"
+        assert m3_collection != treasury_coll, (
+            f"Collision detected for sid={sid}: m3={m3_collection}, treasury={treasury_coll}"
         )

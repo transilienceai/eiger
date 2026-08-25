@@ -16,6 +16,19 @@ def slug(session_id: str) -> str:
     return "s" + hashlib.sha1(session_id.encode()).hexdigest()[:32]
 
 
+def treasury_collection(session_id: str) -> str:
+    """Chroma collection for the capstone's own store, separate from M3's KB.
+
+    The prefix goes AFTER the hash. slug("treasury-" + sid) would collide:
+    hashing a concatenation destroys the boundary, so session id "treasury-p1"
+    would resolve to participant p1's treasury collection via M3's
+    unauthenticated routes. This scheme is safe because slug() always returns
+    "s" + hex (33 chars), while "treasury_" + hex is always 42 chars starting "t",
+    so length and first character both differ unconditionally.
+    """
+    return "treasury_" + slug(session_id)
+
+
 class BankProvider:
     def __init__(self, seed_for: Callable[[str], list[dict]]) -> None:
         self._seed_for = seed_for

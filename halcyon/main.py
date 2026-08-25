@@ -9,7 +9,7 @@ from halcyon.mcp_config import load_mcp_servers
 from halcyon.mcp_host import http_host, in_memory_host
 from halcyon.mcp_vault import SERVER_CORE, SERVER_CRM, TokenVault
 from halcyon.pg_store import PostgresStore, init_schema
-from halcyon.session_resources import BankProvider, KBProvider, slug
+from halcyon.session_resources import BankProvider, KBProvider, slug, treasury_collection
 from halcyon.treasury_state import TreasuryProvider
 from halcyon.web import create_app
 
@@ -20,7 +20,7 @@ _kb_for = KBProvider(lambda sid: ChromaKB(collection=slug(sid)), kb_fixtures.SEE
 _bank_for = BankProvider(bank_fixtures.seed_for)
 _vault = TokenVault({SERVER_CORE: "core-token-dev", SERVER_CRM: "crm-token-dev"})
 _treasury_for = TreasuryProvider(scenarios=treasury_corpus.SCENARIO_KEYS)
-_treasury_kb_for = KBProvider(lambda sid: ChromaKB(collection="treasury_" + slug(sid)), treasury_corpus.SEED)
+_treasury_kb_for = KBProvider(lambda sid: ChromaKB(collection=treasury_collection(sid)), treasury_corpus.SEED)
 
 
 def _factory(provider: str | None, model: str | None, api_key: str | None):
