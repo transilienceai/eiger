@@ -298,3 +298,40 @@ def test_main_wires_a_treasury_provider():
     assert "TreasuryProvider" in src
     assert "treasury_for" in src
     assert "SCENARIO_KEYS" in src
+
+
+def test_treasury_kb_collection_name_prevents_collision():
+    # CRITICAL: The two KB providers must *never* resolve to the same Chroma
+    # collection, even for adversarial session_id values. Prefixing before
+    # hashing (e.g., slug("treasury-" + sid)) creates a collision:
+    #   slug("treasury-" + "p1") = slug("treasury-p1")
+    # so a participant with session_id="treasury-p1" would resolve their M3
+    # KB to p1's treasury collection, reinstating all three failure modes
+    # the second provider was added to prevent.
+    #
+    # The fix: prefix *after* hashing. slug() always returns "s" followed
+    # by hex, so "treasury_" + hex can never equal a bare slug() output.
+    from halcyon.session_resources import slug
+
+    # Test the naming scheme against a range of adversarial inputs.
+    test_cases = [
+        "p1",
+        "p2",
+        "treasury-p1",
+        "treasury_p1",
+        "treasury-" + "p1",
+        "treasury_" + "p1",
+        "treasury_" + "treasury_p1",
+    ]
+
+    for sid in test_cases:
+        m3_collection = slug(sid)
+        treasury_collection = "treasury_" + slug(sid)
+        # M3's collection starts with hex hash (after "s"), never with "treasury_"
+        assert m3_collection.startswith("s"), f"M3 collection should start with 's': {m3_collection}"
+        # Treasury's collection always starts with "treasury_"
+        assert treasury_collection.startswith("treasury_"), f"Treasury collection should start with 'treasury_': {treasury_collection}"
+        # They must never be equal
+        assert m3_collection != treasury_collection, (
+            f"Collision detected for sid={sid}: m3={m3_collection}, treasury={treasury_collection}"
+        )

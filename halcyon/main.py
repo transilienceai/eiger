@@ -20,7 +20,7 @@ _kb_for = KBProvider(lambda sid: ChromaKB(collection=slug(sid)), kb_fixtures.SEE
 _bank_for = BankProvider(bank_fixtures.seed_for)
 _vault = TokenVault({SERVER_CORE: "core-token-dev", SERVER_CRM: "crm-token-dev"})
 _treasury_for = TreasuryProvider(scenarios=treasury_corpus.SCENARIO_KEYS)
-_treasury_kb_for = KBProvider(lambda sid: ChromaKB(collection=slug("treasury-" + sid)), treasury_corpus.SEED)
+_treasury_kb_for = KBProvider(lambda sid: ChromaKB(collection="treasury_" + slug(sid)), treasury_corpus.SEED)
 
 
 def _factory(provider: str | None, model: str | None, api_key: str | None):
