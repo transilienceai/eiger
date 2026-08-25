@@ -2,7 +2,6 @@ import logging
 import os
 
 from halcyon import bank_fixtures, crm_fixtures, kb_fixtures
-from halcyon.chain_state import ChainProvider
 from halcyon.chroma_kb import ChromaKB
 from halcyon.config import load_settings
 from halcyon.llm import build_llm, build_tool_llm
@@ -19,7 +18,6 @@ _store = PostgresStore(_settings.database_url)
 _kb_for = KBProvider(lambda sid: ChromaKB(collection=slug(sid)), kb_fixtures.SEED)
 _bank_for = BankProvider(bank_fixtures.seed_for)
 _vault = TokenVault({SERVER_CORE: "core-token-dev", SERVER_CRM: "crm-token-dev"})
-_chain_for = ChainProvider()
 
 
 def _factory(provider: str | None, model: str | None, api_key: str | None):
@@ -63,5 +61,4 @@ else:
 
 app = create_app(
     _store, _settings, _factory, _kb_for, _bank_for, _tool_llm_factory, _mcp_host_factory,
-    chain_for=_chain_for,
 )
