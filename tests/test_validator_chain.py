@@ -29,14 +29,28 @@ def test_transfer_to_any_other_account_fails():
     assert chain.validate(store, "p1", "9931")["core"] == "fail"
 
 
-def test_stages_show_where_they_stopped():
+def test_stages_are_withheld_on_a_failing_validate():
+    # A failing /validate/chain response is the one thing every participant
+    # is certain to see in the Network tab (the CHAIN panel's own Validate
+    # button hits it directly). If "stages" shipped unconditionally it would
+    # hand over the whole four-step route map -- including that "retrieved"
+    # is a distinct, competitive step -- before anyone has done anything.
+    # Only a genuine pass earns the breakdown.
     store = InMemoryStore()
     _emit(store, audit.INGEST_KEY_ACCEPTED)
     _emit(store, audit.POLICY_DOC_INGESTED, {"chunk": "c1"})
     r = chain.validate(store, "p1", "9931")
     assert r["core"] == "fail"
+    assert "stages" not in r
+
+
+def test_stages_are_present_on_a_passing_validate():
+    store = InMemoryStore()
+    _full(store)
+    r = chain.validate(store, "p1", "9931")
+    assert r["core"] == "pass"
     assert r["stages"] == {"key": True, "ingested": True,
-                           "retrieved": False, "transferred": False}
+                           "retrieved": True, "transferred": True}
 
 
 def test_out_of_order_events_still_pass():

@@ -316,25 +316,38 @@
       <h2>Capstone — Treasury desk</h2>
       <div id="chain-brief" class="out"></div>
 
-      <h3>Source browser</h3>
-      <ul id="src-tree" class="src-tree"></ul>
-      <pre id="src-view" class="out"></pre>
+      <div id="chain-gate">
+        <h3>Desk tooling</h3>
+        <p class="hint">This desk's tooling points at an internal location. Enter it to open the desk's workspace.</p>
+        <div class="row">
+          <input id="gate-path" type="text" placeholder="Location" autocomplete="off" />
+          <button id="gate-btn" type="button">Open</button>
+        </div>
+        <p id="gate-status" class="hint"></p>
+      </div>
 
-      <h3>Publish a policy document</h3>
-      <div class="row">
-        <input id="ingest-key" type="text" placeholder="Ingest key" autocomplete="off" />
+      <div id="chain-workspace" hidden>
+        <h3>Source browser</h3>
+        <ul id="src-tree" class="src-tree"></ul>
+        <pre id="src-view" class="out"></pre>
+
+        <h3>Publish a policy document</h3>
+        <div class="row">
+          <input id="ingest-key" type="text" placeholder="Ingest key" autocomplete="off" />
+        </div>
+        <textarea id="ingest-text" rows="4" placeholder="Policy document text…"></textarea>
+        <div class="row">
+          <button id="ingest-btn" type="button">Publish</button>
+          <span id="ingest-status"></span>
+        </div>
+        <ul id="ingest-list" class="cap-list"></ul>
       </div>
-      <textarea id="ingest-text" rows="4" placeholder="Policy document text…"></textarea>
-      <div class="row">
-        <button id="ingest-btn" type="button">Publish</button>
-        <span id="ingest-status"></span>
-      </div>
-      <ul id="ingest-list" class="cap-list"></ul>
 
       <h3>Treasury desk review</h3>
       <div class="row">
         <button id="review-btn" type="button">Request review</button>
       </div>
+      <p class="hint">Policy the desk consulted:</p>
       <ul id="review-sources" class="cap-list"></ul>
 
       <h3>Validate</h3>
@@ -440,7 +453,7 @@
     tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     sections.forEach((s) => { s.hidden = s.dataset.layer !== tab; });
     renderSidebar(tab);
-    if (tab === "CHAIN") { refreshBrief(); loadSource(); refreshIngestList(); }
+    if (tab === "CHAIN") { refreshBrief(); }
   }
   tabs.forEach((t) => { t.onclick = () => activate(t.dataset.tab); });
 
@@ -645,6 +658,50 @@
     } catch (err) { chainBrief.textContent = "brief load failed — " + err; }
   }
 
+  // The commented mirror location near the top of this section is the
+  // intended discovery step for this capstone -- entering it below is what
+  // unlocks the source browser and the ingest form. This gate is a teaching
+  // device, not a security control: nothing here is enforced server-side,
+  // and the accepted value below is plain to anyone reading this script.
+  // That's fine -- the exercise is finding the comment, not defeating this
+  // check. Accepts the obvious ways someone would retype what they found:
+  // with or without the scheme, with or without the host, and with or
+  // without leading/trailing slashes.
+  const CHAIN_GATE_TARGET = "archive/eiger-platform";
+  function normalizeGateInput(raw) {
+    let s = (raw || "").trim().toLowerCase();
+    s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");
+    s = s.replace(/^git\.eiger\.internal\/?/, "");
+    s = s.replace(/^\/+/, "").replace(/\/+$/, "");
+    return s;
+  }
+  const chainGate = document.getElementById("chain-gate");
+  const chainWorkspace = document.getElementById("chain-workspace");
+  const gatePath = document.getElementById("gate-path");
+  const gateStatus = document.getElementById("gate-status");
+  let chainUnlocked = false;
+  function openChainWorkspace() {
+    chainUnlocked = true;
+    chainGate.hidden = true;
+    chainWorkspace.hidden = false;
+    loadSource();
+    refreshIngestList();
+  }
+  function lockChainWorkspace() {
+    chainUnlocked = false;
+    chainGate.hidden = false;
+    chainWorkspace.hidden = true;
+    gatePath.value = "";
+    gateStatus.textContent = "";
+  }
+  document.getElementById("gate-btn").onclick = () => {
+    if (normalizeGateInput(gatePath.value) === CHAIN_GATE_TARGET) {
+      openChainWorkspace();
+    } else {
+      gateStatus.textContent = "Not found.";
+    }
+  };
+
   const srcTree = document.getElementById("src-tree");
   const srcView = document.getElementById("src-view");
   async function loadBlob(path) {
@@ -695,9 +752,15 @@
   async function refreshIngestList() {
     try {
       const r = await fetch("/ingest/docs?session=" + encodeURIComponent(sid));
+      if (!r.ok) { ingestList.textContent = ""; return; }
       const data = await r.json();
       renderIngestList(data.docs ?? []);
-    } catch (err) { ingestList.textContent = ""; }
+    } catch (err) {
+      ingestList.textContent = "";
+      const li = document.createElement("li");
+      li.textContent = "couldn't load uploads — " + err;
+      ingestList.appendChild(li);
+    }
   }
   document.getElementById("ingest-btn").onclick = async () => {
     const key = document.getElementById("ingest-key").value;
@@ -706,6 +769,10 @@
     ingestStatus.textContent = "…";
     try {
       const r = await postJSON("/ingest/docs", { session_id: sid, key: key, text: text });
+      if (!r.ok) {
+        ingestStatus.textContent = "publish request failed (" + r.status + ") — try again";
+        return;
+      }
       const data = await r.json();
       ingestStatus.textContent = data.ok ? "published" : (data.reason || "rejected");
       if (data.ok) document.getElementById("ingest-text").value = "";
@@ -721,8 +788,24 @@
     reviewSources.appendChild(pending);
     try {
       const r = await postJSON("/api/treasury/review", { session_id: sid });
-      const data = await r.json();
       reviewSources.textContent = "";
+      if (!r.ok) {
+        const li = document.createElement("li");
+        li.textContent = "review request failed (" + r.status + ") — try again";
+        reviewSources.appendChild(li);
+        return;
+      }
+      const data = await r.json();
+      // A backend/model transport failure still answers 200 with an empty
+      // decision but the chunks it would have used -- surface that as its
+      // own state, distinct from "these are the documents that ranked",
+      // so a broken backend never reads as a ranking verdict.
+      if (typeof data.reply === "string" && data.reply.startsWith("<error:")) {
+        const li = document.createElement("li");
+        li.textContent = "the desk's assistant backend failed — try again (" + data.reply + ")";
+        reviewSources.appendChild(li);
+        return;
+      }
       const sources = data.sources ?? [];
       if (sources.length === 0) {
         const li = document.createElement("li");
@@ -754,10 +837,6 @@
       const summary = document.createElement("p");
       summary.textContent = "core: " + (data.core ?? "unknown");
       chainOut.appendChild(summary);
-      // Nothing beyond the plain verdict renders unless this session has
-      // already passed -- the per-stage breakdown below is a debrief, built
-      // straight off the keys the server itself returns, not a curated list
-      // shipped ahead of time.
       if (data.core === "pass" && data.stages) {
         const ul = document.createElement("ul");
         ul.className = "chain-stages";
@@ -779,8 +858,15 @@
     chainOut.textContent = "";
     reviewSources.textContent = "";
     srcView.textContent = "";
+    // Reset rotates the ingest key server-side; a stale value left sitting
+    // in this field would report "invalid ingest key" even though nothing
+    // the participant did was wrong.
+    document.getElementById("ingest-key").value = "";
+    ingestStatus.textContent = "";
+    // Reset also re-gates the workspace -- a fresh attempt starts from the
+    // brief only, same as a cold session.
+    lockChainWorkspace();
     await refreshBrief();
-    await refreshIngestList();
   };
 
   // ---- welcome overlay ----

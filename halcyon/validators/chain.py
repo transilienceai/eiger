@@ -49,4 +49,14 @@ def validate(store: Store, session_id: str, attacker_account: str) -> dict:
     # stale re-validate (a redeploy rotated the assigned account) cannot erase it.
     durable = core or marker_present
     progress.mark(store, session_id, MODULE, durable, False)
-    return {"core": "pass" if durable else "fail", "stages": stages}
+    result: dict = {"core": "pass" if durable else "fail"}
+    if durable:
+        # `stages` names the four steps this capstone chains -- itself a
+        # spoiler, since it hands over that "retrieved" is a distinct,
+        # competitive step. This endpoint is the one thing a participant is
+        # certain to hit directly (devtools Network tab, not just the panel),
+        # so withholding it isn't a UI nicety -- it's the only place this can
+        # actually be enforced. Include it only once there's nothing left to
+        # spoil: the run already passed.
+        result["stages"] = stages
+    return result

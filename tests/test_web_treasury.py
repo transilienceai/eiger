@@ -360,17 +360,45 @@ def test_page_never_ships_the_agents_query_or_route_spoilers():
     text = client.get("/chat", params={"session": "p1"}).text.lower()
     for s in treasury_corpus.SCENARIOS.values():
         assert s.query.lower() not in text, "the agent's query must never ship"
-    # NOTE: the mechanism-giveaway words are scoped to the CHAIN section, not
+    # NOTE: the mechanism-giveaway words are scoped to the CHAIN surface, not
     # the whole page. M1/M2/M3/M4/M6 legitimately use "injection"/"poison" to
     # teach their OWN, already-covered modules (e.g. the L1 tab's own title
     # says "RAG poisoning") -- a whole-page check would false-positive on
     # that unrelated, correct content forever. What must never appear is
     # these words describing THIS capstone's own retrieval mechanism.
-    start = text.index('data-layer="chain"')
-    end = text.index("</section>", start)
-    chain_section = text[start:end]
+    #
+    # "CHAIN surface" is the section markup AND the CHAIN-specific <script>
+    # block. Fix round 1: the first version of this test only covered the
+    # section (data-layer="chain" .. </section>), missing the JS block
+    # entirely -- precisely the channel the predecessor's actual spoiler
+    # shipped through (a JS comment "for maintainers" that rendered nowhere
+    # but was present in every /chat response). A word reintroduced in the
+    # CHAIN JS today would have passed the old slice silently.
+    section_start = text.index('data-layer="chain"')
+    section_end = text.index("</section>", section_start)
+    js_start = text.index("---- chain capstone ----")
+    js_end = text.index("---- welcome overlay ----", js_start)
+    chain_surface = text[section_start:section_end] + text[js_start:js_end]
     for word in ("poison", "inject", "retrieval rank", "top-3", "embedding"):
-        assert word not in chain_section, f"'{word}' gives away the mechanism"
+        assert word not in chain_surface, f"'{word}' gives away the mechanism"
+
+
+def test_stage_debrief_only_appears_inside_the_pass_branch():
+    # Pins the predecessor's actual failure mode -- a stage breakdown
+    # reachable before a pass -- at the template-source level, not just by
+    # hand-reading the JS. The debrief list's class name must be built in
+    # exactly one place, and that place must sit inside the branch gated on
+    # data.core === "pass".
+    from pathlib import Path
+    src = Path("halcyon/templates/chat.html").read_text()
+    marker = 'ul.className = "chain-stages";'
+    assert src.count(marker) == 1, "the debrief list must be built in exactly one place"
+    guard = 'if (data.core === "pass" && data.stages) {'
+    guard_idx = src.index(guard)
+    marker_idx = src.index(marker)
+    assert guard_idx < marker_idx < guard_idx + 300, (
+        "the debrief list must be built strictly inside the pass-only branch"
+    )
 
 
 def test_commented_repo_url_is_present_but_not_on_the_reach_test_page():
@@ -378,3 +406,121 @@ def test_commented_repo_url_is_present_but_not_on_the_reach_test_page():
     chat = client.get("/chat", params={"session": "p1"}).text
     assert "<!--" in chat and "eiger-platform" in chat
     assert "eiger-platform" not in client.get("/").text
+
+
+def test_chain_workspace_is_gated_on_cold_load():
+    # The source browser and ingest form must not render until the
+    # participant supplies the repo path commented in the page source --
+    # otherwise both are decorative, discoverable by simply opening the tab.
+    client, _, _, _ = make_client()
+    chat = client.get("/chat", params={"session": "p1"}).text
+    import re
+
+    workspace = re.search(r'<div id="chain-workspace"([^>]*)>', chat)
+    assert workspace is not None, "chain-workspace container is missing"
+    assert "hidden" in workspace.group(1), "workspace must start hidden"
+    gate = re.search(r'<div id="chain-gate"([^>]*)>', chat)
+    assert gate is not None, "chain-gate container is missing"
+    assert "hidden" not in gate.group(1), "the gate prompt itself must be visible on cold load"
+    # The controls the gate protects are still present in the markup (this
+    # is a client-side teaching gate, not server-side access control) --
+    # they're just wrapped in the hidden container above.
+    for el in ('id="src-tree"', 'id="ingest-key"'):
+        assert el in chat
+
+
+def _extract_gate_normalizer(src: str):
+    """Pull the real `normalizeGateInput` regex replacements and the real
+    `CHAIN_GATE_TARGET` string out of the shipped template, and return a
+    Python function that applies the SAME patterns in the SAME order. This
+    exercises the actual patterns that ship to participants, not a
+    hand-duplicated re-implementation that could silently drift from them.
+    """
+    import re
+
+    target_m = re.search(r'CHAIN_GATE_TARGET\s*=\s*"([^"]+)"', src)
+    assert target_m, "CHAIN_GATE_TARGET constant not found"
+    target = target_m.group(1)
+
+    fn_start = src.index("function normalizeGateInput")
+    fn_end = src.index("\n  }", fn_start)
+    fn_body = src[fn_start:fn_end]
+    steps = re.findall(r'\.replace\(/(.+?)/(\w*),\s*"([^"]*)"\)', fn_body)
+    # protocol strip, host strip, leading-slash strip, trailing-slash strip
+    assert len(steps) == 4, "expected four .replace() normalization steps"
+
+    def normalize(raw: str) -> str:
+        s = (raw or "").strip().lower()
+        for pattern, _flags, repl in steps:
+            s = re.sub(pattern.replace("\\/", "/"), repl, s, count=1)
+        return s
+
+    return normalize, target
+
+
+def test_gate_accepts_the_documented_variants_of_the_repo_path():
+    from pathlib import Path
+
+    src = Path("halcyon/templates/chat.html").read_text()
+    normalize, target = _extract_gate_normalizer(src)
+    assert target == "archive/eiger-platform"
+    accepted = [
+        "archive/eiger-platform",
+        "/archive/eiger-platform",
+        "archive/eiger-platform/",
+        "/archive/eiger-platform/",
+        "git.eiger.internal/archive/eiger-platform",
+        "https://git.eiger.internal/archive/eiger-platform",
+        "HTTPS://GIT.EIGER.INTERNAL/ARCHIVE/EIGER-PLATFORM",
+        "  archive/eiger-platform  ",
+    ]
+    for variant in accepted:
+        assert normalize(variant) == target, f"{variant!r} should have been accepted"
+
+
+def test_gate_rejects_wrong_entries_without_hinting():
+    from pathlib import Path
+
+    src = Path("halcyon/templates/chat.html").read_text()
+    normalize, target = _extract_gate_normalizer(src)
+    rejected = [
+        "eiger-platform",
+        "archive/eiger-platform-old",
+        "archive",
+        "wrong/path",
+        "",
+        "ci.yml",
+        ".env.sample",
+    ]
+    for variant in rejected:
+        assert normalize(variant) != target, f"{variant!r} should NOT have been accepted"
+    # The onclick handler must not reach the unlock call on a mismatch, and
+    # the failure message must be a flat, non-hinting string.
+    handler_start = src.index('document.getElementById("gate-btn").onclick')
+    handler_end = src.index("};", handler_start)
+    handler = src[handler_start:handler_end]
+    assert "openChainWorkspace()" in handler
+    else_branch = handler[handler.index("} else {"):]
+    assert "openChainWorkspace" not in else_branch
+    assert 'gateStatus.textContent = "Not found."' in else_branch
+    for word in ("archive", "eiger-platform", "git.eiger.internal", "ci.yml", ".env"):
+        assert word not in "not found.", "sanity: the literal failure text carries no hint"
+
+
+def test_reset_re_gates_the_workspace():
+    from pathlib import Path
+
+    src = Path("halcyon/templates/chat.html").read_text()
+    # lockChainWorkspace() must actually restore the gated state...
+    lock_start = src.index("function lockChainWorkspace()")
+    lock_end = src.index("\n  }", lock_start)
+    lock_body = src[lock_start:lock_end]
+    assert "chainGate.hidden = false;" in lock_body
+    assert "chainWorkspace.hidden = true;" in lock_body
+    assert "gatePath.value = \"\";" in lock_body
+    assert "gateStatus.textContent = \"\";" in lock_body
+    # ...and chain-reset's handler must actually call it.
+    reset_start = src.index('document.getElementById("chain-reset").onclick')
+    reset_end = src.index("\n  };", reset_start)
+    reset_body = src[reset_start:reset_end]
+    assert "lockChainWorkspace();" in reset_body
