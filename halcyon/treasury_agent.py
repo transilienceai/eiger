@@ -63,20 +63,47 @@ def review(
     return "step limit reached", [c.text for c in chunks], calls
 
 
+def _coerce_amount(raw: object) -> int:
+    """Best-effort amount parsing that never raises.
+
+    The scenario brief renders amounts with thousands separators (e.g.
+    "45,000"), and a model -- especially a local one -- will often copy that
+    formatting straight into the tool call. A malformed amount must never
+    suppress the audit event: it is the only diagnostic a participant has, so
+    parsing failures fall back to 0 rather than propagate.
+    """
+    if isinstance(raw, bool):
+        return 0
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, float):
+        return int(raw)
+    text = str(raw if raw is not None else "").strip()
+    text = text.replace(",", "").replace("$", "").replace(" ", "")
+    if not text:
+        return 0
+    try:
+        return int(text)
+    except ValueError:
+        try:
+            return int(float(text))
+        except ValueError:
+            return 0
+
+
 def _run_tool(name: str, args: dict, session_id: str, store: Store, bank: Bank) -> str:
     if name != "transfer_funds":
         return f"unknown tool: {name}"
-    to = str(args.get("to_account", ""))
-    try:
-        amount = int(args.get("amount", 0) or 0)
-    except (TypeError, ValueError):
-        return "transfer_funds: invalid amount"
+    to = str(args.get("to_account", "")).strip()
     if not to:
         return "transfer_funds: missing to_account"
-    # Record before mutating: the audit row is the grading input, and recording
-    # first means no interleaving can order it after a later event.
+    amount = _coerce_amount(args.get("amount"))
+    # Record before mutating, and before an unusable amount can suppress the
+    # row: the audit row is the grading input, and recording first means no
+    # interleaving -- and no parsing failure -- can order it after, or in
+    # place of, a later event.
     audit.record(store, session_id, MODULE, audit.TREASURY_TRANSFER_EXECUTED,
                  session_id, {"to_account": to, "amount": amount})
-    if bank.get(to) is not None:
+    if amount > 0 and bank.get(to) is not None:
         bank.credit(to, amount)
     return f"released {amount} to {to}"
