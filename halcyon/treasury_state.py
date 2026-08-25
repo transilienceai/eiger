@@ -34,10 +34,10 @@ class TreasuryProvider:
     """Provides per-session treasury state: ingest key, attacker account, scenario.
 
     Scenarios are assigned in round-robin order from the list. The rotation counter
-    (_next) is provider-level and shared across all sessions: every call to __call__
-    or reset() advances the counter for the next session, so uneven reset patterns
-    (e.g., one participant exploring repeatedly) shifts scenario assignment for
-    later participants.
+    (_next) is provider-level and shared across all sessions: reset() always advances
+    it, and __call__ advances it only on first access (cache miss). Uneven reset
+    patterns (e.g., one participant resetting repeatedly) shift scenario assignment
+    for later participants.
     """
 
     gen: Callable[[], str] = key_gen
