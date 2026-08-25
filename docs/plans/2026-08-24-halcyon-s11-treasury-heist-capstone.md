@@ -21,7 +21,7 @@ Copied from `docs/specs/2026-08-24-halcyon-s11-treasury-heist-capstone-design.md
 - **The agent's query is never shown**, in any response, template, comment, or error string. Inferring it is the puzzle.
 - **Participants read source.** Comments, docstrings, fixture text and error strings are shipped teaching surface.
 - **Module id stays `"chain"`.** S11 replaces S10 in place.
-- **Gates:** `uv run ruff check .` and `uv run mypy halcyon` clean. Baseline suite before this plan: **297 passed, 5 skipped** (verify with `uv run pytest -q`; the S10 plan's "181 passed" was stale, do not trust plan-document test counts).
+- **Gates:** `uv run ruff check .` and `uv run mypy halcyon` clean at the end of every task **except Task 2**, which removes config flags that Task 8's soon-to-be-deleted files still reference. Task 2 states this explicitly; no other task may leave a gate red. Baseline suite before this plan: **297 passed, 5 skipped** (verify with `uv run pytest -q`; the S10 plan's "181 passed" was stale, do not trust plan-document test counts).
 
 ## File Structure
 
@@ -754,17 +754,27 @@ def blob(path: str, ingest_key: str) -> str:
     return _BENIGN.get(path, "")
 ```
 
-Note `log()` is removed — the commit-log fixture belonged to S10's narrative. If `web.py` still imports it, Task 9 removes that call; leave the import error for now if one appears and record it in your report.
+- [ ] **Step 4: Drop the `log` call from `/source/tree` in the same commit**
 
-- [ ] **Step 4: Run tests + gates**
+`log()` is removed — the commit-log fixture belonged to S10's narrative — and `halcyon/web.py`'s
+`/source/tree` currently returns `{"tree": ..., "log": source_browser.log()}`. Leaving that call
+would break the suite from here until Task 9, so fix it now:
 
-Run: `uv run pytest tests/test_source_browser.py -q && uv run ruff check halcyon/source_browser.py`
+```python
+    @app.get("/source/tree")
+    def source_tree(session: str) -> dict:
+        return {"tree": source_browser.tree()}
+```
+
+- [ ] **Step 5: Run tests + gates**
+
+Run: `uv run pytest tests/test_source_browser.py -q && uv run ruff check .`
 Expected: PASS, clean.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add halcyon/source_browser.py tests/test_source_browser.py
+git add halcyon/source_browser.py halcyon/web.py tests/test_source_browser.py
 git commit -m "feat(chain): extended repo fixture -- key and route in separate files"
 ```
 
@@ -1151,7 +1161,23 @@ git rm tests/test_chain_deploy.py tests/test_chain_worker.py tests/test_chain_ag
 
 - [ ] **Step 2: Strip S10 from `web.py`**
 
-In `halcyon/web.py` remove: the imports of `run_ops_agent`, `handle_deploy`, `ChainProvider`, `StubWorker`; the `DeployIn` and `CallbackIn` models; the `chain_for` parameter and the `chain` / `_chain_report` / `_worker` block inside `create_app`; and the routes `/internal/deploy`, `/api/ops-agent`, `/chain/callback`. Leave `/source/tree`, `/source/blob`, and the `"chain"` special cases in `validate`/`reset` in place — Task 9 rewrites them.
+In `halcyon/web.py` remove: the imports of `run_ops_agent`, `handle_deploy`, `ChainProvider`, `StubWorker`; the `DeployIn` and `CallbackIn` models; the `chain_for` parameter and the `chain` / `_chain_report` / `_worker` block inside `create_app`; and the routes `/internal/deploy`, `/api/ops-agent`, `/chain/callback`.
+
+**The `"chain"` special cases in `validate`/`reset` call `chain(session).vault_master`, and you are deleting the provider that supplies it.** Leaving them would break the app at import/first-call. Replace both with a temporary placeholder that Task 9 overwrites:
+
+```python
+        # placeholder between S10's removal and S11's wiring (Task 9)
+        if module == "chain":
+            return {"core": "fail", "stages": {}}
+```
+
+```python
+        if module == "chain":
+            store.write_reset_marker(body.session_id, "chain")
+            return {"status": "reset", "module": "chain"}
+```
+
+`/source/blob` also passes `chain(session).ci_token`; change it to a literal `""` for now — Task 9 rewires it to the real ingest key. Leave `/source/tree` as Task 5 left it.
 
 Remove `make_chain_client` from `tests/conftest.py`.
 
