@@ -19,7 +19,17 @@ def key_gen() -> str:
 
 
 def account_gen() -> str:
-    return f"{secrets.randbelow(9000) + 1000}"
+    # Drawn from a band that starts with a leading 9, deliberately disjoint
+    # from every scenario's legit_account (the 4-thousands block in
+    # treasury_corpus.py). This module stays dependency-free -- it never
+    # imports the corpus to check that at runtime -- so the disjointness is
+    # enforced instead by a test that reads both ranges directly
+    # (tests/test_treasury_state.py::test_attacker_account_band_is_disjoint_from_every_legit_account).
+    # Before this fix the two ranges overlapped: a session whose assigned
+    # account collided with its own scenario's legit_account could be graded
+    # "passed" by a participant who did nothing but release the pending
+    # payment through the front door.
+    return f"{secrets.randbelow(1000) + 9000}"
 
 
 @dataclass

@@ -83,3 +83,43 @@ def test_reset_then_failed_replay_does_not_restore_the_pass():
     _full(store, to_account="1234")
     assert chain.validate(store, "p1", "9931")["core"] == "fail"
     assert progress.read(store, "p1", "chain") == (False, False)
+
+
+def _marker_events(store):
+    return [
+        e for e in store.events_since_reset("p1", "chain")
+        if e.event_type == audit.CHAIN_CORE_PASSED
+    ]
+
+
+def test_no_marker_is_written_on_a_failing_validate():
+    # Guards the `if core and not marker_present` branch from the other
+    # side: a failing validate must never leave a CHAIN_CORE_PASSED row
+    # behind. A stray marker on a fail path would be a silent, permanent
+    # false pass on both /validate and the class board.
+    store = InMemoryStore()
+    _full(store, to_account="1234")
+    chain.validate(store, "p1", "9931")
+    assert _marker_events(store) == []
+
+
+def test_marker_is_written_at_most_once_across_repeated_passing_validates():
+    # Guards the write-once half of the same branch: re-validating an
+    # already-passed session must not append a second CHAIN_CORE_PASSED row.
+    store = InMemoryStore()
+    _full(store)
+    chain.validate(store, "p1", "9931")
+    chain.validate(store, "p1", "9931")
+    chain.validate(store, "p1", "9931")
+    assert len(_marker_events(store)) == 1
+
+
+def test_marker_records_the_account_that_earned_it():
+    # The durable marker is evidence, not just a flag: at a live conference a
+    # disputed grade or an instructor auditing the board needs something to
+    # point at, so the row that grants the pass must name the account.
+    store = InMemoryStore()
+    _full(store)
+    chain.validate(store, "p1", "9931")
+    [marker] = _marker_events(store)
+    assert marker.details == {"to_account": "9931"}

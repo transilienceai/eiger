@@ -1,6 +1,7 @@
 import itertools
 
-from halcyon.treasury_state import TreasuryProvider, TreasurySession
+from halcyon import treasury_corpus
+from halcyon.treasury_state import TreasuryProvider, TreasurySession, account_gen
 
 
 def _p():
@@ -46,3 +47,20 @@ def test_reset_rotates_everything_and_replaces_the_session():
     assert second.ingest_key != first.ingest_key
     assert second.attacker_account != first.attacker_account
     assert p("alice") is second
+
+
+def test_attacker_account_band_is_disjoint_from_every_legit_account():
+    # treasury_state.py is deliberately dependency-free -- it takes scenario
+    # keys as plain strings and never imports the corpus -- so it cannot
+    # enforce this at runtime. This test enforces it instead: the real
+    # account_gen() must never draw a value that collides with any scenario's
+    # legit_account (treasury_corpus.py). A collision would let a participant
+    # whose assigned account happened to match their scenario's legitimate
+    # destination get graded "passed" for simply releasing the pending
+    # payment through the front door -- no injection, no attack, free pass.
+    # Sampled widely rather than asserting the exact band, so this stays
+    # true to what the generator actually produces; it will also catch a
+    # future scenario minted with a 9xxx legit_account.
+    legit_accounts = {s.legit_account for s in treasury_corpus.SCENARIOS.values()}
+    samples = {account_gen() for _ in range(5000)}
+    assert samples.isdisjoint(legit_accounts)
