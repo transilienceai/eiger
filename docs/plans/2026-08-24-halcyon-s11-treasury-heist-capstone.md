@@ -1484,8 +1484,17 @@ git commit -m "feat(chain): treasury ingest, review, brief and reset endpoints"
 - Test: `tests/test_web_treasury.py` (one assertion appended)
 
 **Interfaces:**
-- Consumes: `TreasuryProvider` (Task 3), `create_app(treasury_for=...)` (Task 9).
-- Produces: `main.app` built with a process-wide `TreasuryProvider` seeded with all four scenarios.
+- Consumes: `TreasuryProvider` (Task 3), `create_app(treasury_for=..., treasury_kb_for=...)` (Task 9).
+- Produces: `main.app` built with a process-wide `TreasuryProvider` seeded with all four scenarios,
+  **and a second `KBProvider` seeded with `treasury_corpus.SEED`** for the capstone's own store.
+
+> **The capstone MUST NOT share M3's knowledge base.** `main.py` has a single `_kb_for` seeded with
+> `kb_fixtures.SEED`. If the treasury routes reuse it: the agent retrieves from M3's corpus so the
+> capstone has nothing to compete against; `/reset/chain` re-seeds that store and wipes M3's; M3's
+> `/api/kb` writes into the store the agent reads; and the ingest bypass the spec's isolation
+> decision exists to close silently reopens. Wire a second provider:
+> `_treasury_kb_for = KBProvider(lambda sid: ChromaKB(collection=slug("treasury-" + sid)), treasury_corpus.SEED)`
+> — note the distinct collection prefix, or the two providers collide inside Chroma.
 
 - [ ] **Step 1: Write the failing test**
 
