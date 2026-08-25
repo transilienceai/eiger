@@ -108,6 +108,31 @@ def test_review_returns_citations():
     assert len(body["sources"]) == 3
 
 
+def test_unauthenticated_review_returns_no_seeded_document_text():
+    # /api/treasury/review takes no key and no proof of prior upload -- a
+    # session_id a caller made up on the spot is enough to call it. Confirm
+    # that alone never returns the seeded corpus's own text, only ever a
+    # placeholder, by checking against the corpus content itself rather than
+    # a specific placeholder string.
+    client, store, tf, m3_kb_for = make_client()
+    seed_texts = {f["text"] for f in treasury_corpus.SEED}
+    body = client.post("/api/treasury/review", json={"session_id": "brand-new"}).json()
+    assert len(body["sources"]) == 3
+    assert not (set(body["sources"]) & seed_texts)
+
+
+def test_own_upload_still_appears_verbatim_in_review_sources():
+    # The diagnostic loop a participant relies on -- "is my document in the
+    # list?" -- must survive redacting the seeded corpus: it only ever needs
+    # their own upload, never the seed text.
+    client, store, tf, m3_kb_for = make_client()
+    key = _key(client, tf)
+    scenario = treasury_corpus.SCENARIOS[tf("p1").scenario]
+    client.post("/ingest/docs", json={"session_id": "p1", "key": key, "text": scenario.query})
+    body = client.post("/api/treasury/review", json={"session_id": "p1"}).json()
+    assert scenario.query in body["sources"]
+
+
 def test_reset_rotates_key_and_account_and_clears_uploads():
     client, store, tf, m3_kb_for = make_client()
     key = _key(client, tf)

@@ -46,6 +46,48 @@ def test_citations_are_returned_so_a_participant_can_diagnose():
     assert all(isinstance(c, str) for c in cited)
 
 
+def test_seeded_document_text_is_never_returned_as_a_citation():
+    kb, bank, store, session = _fixture()
+    llm = StubToolLLM([FinalAnswer("declined")])
+    _, cited, _ = treasury_agent.review(llm, "p1", session, kb, bank, store, VULN)
+    seed_texts = {f["text"] for f in treasury_corpus.SEED}
+    assert not (set(cited) & seed_texts)
+    assert all(c == treasury_agent.SEEDED_CITATION_PLACEHOLDER for c in cited)
+
+
+def test_own_upload_is_verbatim_while_seed_chunks_stay_opaque():
+    kb, bank, store, session = _fixture()
+    mine = "supplier invoice settlement release vendor approval policy"
+    kb.add(mine, "user", owner_session="p1")
+    llm = StubToolLLM([FinalAnswer("declined")])
+    _, cited, _ = treasury_agent.review(llm, "p1", session, kb, bank, store, VULN)
+    assert mine in cited
+    assert cited.count(treasury_agent.SEEDED_CITATION_PLACEHOLDER) == len(cited) - 1
+
+
+def test_the_model_still_receives_the_real_seeded_text_in_its_policy_block():
+    """Redacting the response must not touch what the model reads: the
+    citations returned to the caller and the policy block built into the
+    system message are two separate views over the same retrieved chunks."""
+    kb, bank, store, session = _fixture()
+
+    class _RecordingLLM:
+        def __init__(self) -> None:
+            self.messages: list[dict] = []
+
+        def next_step(self, messages: list[dict], tools: list[dict]):
+            self.messages = messages
+            return FinalAnswer("declined")
+
+    llm = _RecordingLLM()
+    _, cited, _ = treasury_agent.review(llm, "p1", session, kb, bank, store, VULN)
+    system_content = llm.messages[0]["content"]
+    seed_texts = [f["text"] for f in treasury_corpus.SEED]
+    assert any(t in system_content for t in seed_texts), \
+        "the model's policy block must still contain real seeded text"
+    assert all(c == treasury_agent.SEEDED_CITATION_PLACEHOLDER for c in cited)
+
+
 def test_user_provenance_chunk_in_context_is_recorded():
     kb, bank, store, session = _fixture()
     kb.add("supplier invoice settlement release vendor approval policy", "user",
