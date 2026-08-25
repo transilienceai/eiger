@@ -1144,7 +1144,7 @@ git commit -m "feat(chain): validator keys on transfer to the assigned account"
 
 **Files:**
 - Delete: `halcyon/chain_deploy.py`, `halcyon/chain_worker.py`, `halcyon/chain_agent.py`, `halcyon/chain_state.py`, `tests/test_chain_deploy.py`, `tests/test_chain_worker.py`, `tests/test_chain_agent.py`, `tests/test_chain_state.py`, `tests/test_chain_e2e.py`, `tests/test_web_chain.py`
-- Modify: `halcyon/web.py` (remove S10 imports, routes, wiring), `tests/conftest.py` (remove `make_chain_client`)
+- Modify: `halcyon/web.py` (remove S10 imports, routes, wiring), `tests/conftest.py` (remove `make_chain_client`), `halcyon/learn_content.py` (drop the stale `"CHAIN"` entry), `tests/test_learn_content.py`
 
 **Interfaces:**
 - Produces: a codebase with no S10 stage machinery. `web.py` keeps `/source/tree`, `/source/blob`, `/validate/{module}` and `/reset/{module}`; Task 9 rewires them.
@@ -1181,12 +1181,21 @@ In `halcyon/web.py` remove: the imports of `run_ops_agent`, `handle_deploy`, `Ch
 
 Remove `make_chain_client` from `tests/conftest.py`.
 
-- [ ] **Step 3: Verify the tree is consistent**
+- [ ] **Step 3: Drop the stale CHAIN learn entry**
+
+`halcyon/learn_content.py`'s `"CHAIN"` entry cites `halcyon/chain_deploy.py` as the `source` for two
+snippets, and `tests/test_learn_content.py::test_every_snippet_is_real_source` calls
+`read_text()` on that path — so deleting the file makes that test **error**, not merely fail, and it
+stays broken until Task 11 writes the replacement. Remove the `"CHAIN"` key from the `LEARN` dict
+here, and update `tests/test_learn_content.py::test_all_layers_present` to drop `"CHAIN"` from its
+expected key set. Task 11 adds both back with the S11 content.
+
+- [ ] **Step 4: Verify the tree is consistent**
 
 Run: `uv run pytest -q 2>&1 | tail -5`
 Expected: collection succeeds; remaining failures are confined to `web.py`'s now-dangling `"chain"` special cases, which Task 9 fixes. Record the exact failure list in your report.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add -A
