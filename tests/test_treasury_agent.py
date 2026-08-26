@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from halcyon import audit, treasury_agent, treasury_corpus
@@ -9,6 +11,15 @@ from halcyon.store import InMemoryStore
 from halcyon.treasury_state import TreasurySession
 
 VULN = load_settings({"HALCYON_MODE": "vulnerable"})
+
+# Shape of a seeded citation -- "<Title Words> §<major>.<minor> (rev
+# <year>-<month>)" -- checked structurally rather than against a fixed
+# string, since the exact reference is derived per-document.
+_SEEDED_CITATION_RE = re.compile(r"^[A-Za-z]+ [A-Za-z]+ §\d+\.\d+ \(rev \d{4}-\d{2}\)$")
+
+
+def _looks_like_seeded_citation(c: str) -> bool:
+    return bool(_SEEDED_CITATION_RE.match(c))
 
 
 def _fixture():
@@ -52,7 +63,7 @@ def test_seeded_document_text_is_never_returned_as_a_citation():
     _, cited, _ = treasury_agent.review(llm, "p1", session, kb, bank, store, VULN)
     seed_texts = {f["text"] for f in treasury_corpus.SEED}
     assert not (set(cited) & seed_texts)
-    assert all(c == treasury_agent.SEEDED_CITATION_PLACEHOLDER for c in cited)
+    assert all(_looks_like_seeded_citation(c) for c in cited)
 
 
 def test_own_upload_is_verbatim_while_seed_chunks_stay_opaque():
@@ -62,7 +73,9 @@ def test_own_upload_is_verbatim_while_seed_chunks_stay_opaque():
     llm = StubToolLLM([FinalAnswer("declined")])
     _, cited, _ = treasury_agent.review(llm, "p1", session, kb, bank, store, VULN)
     assert mine in cited
-    assert cited.count(treasury_agent.SEEDED_CITATION_PLACEHOLDER) == len(cited) - 1
+    others = [c for c in cited if c != mine]
+    assert len(others) == len(cited) - 1
+    assert all(_looks_like_seeded_citation(c) for c in others)
 
 
 def test_the_model_still_receives_the_real_seeded_text_in_its_policy_block():
@@ -85,7 +98,7 @@ def test_the_model_still_receives_the_real_seeded_text_in_its_policy_block():
     seed_texts = [f["text"] for f in treasury_corpus.SEED]
     assert any(t in system_content for t in seed_texts), \
         "the model's policy block must still contain real seeded text"
-    assert all(c == treasury_agent.SEEDED_CITATION_PLACEHOLDER for c in cited)
+    assert all(_looks_like_seeded_citation(c) for c in cited)
 
 
 def test_user_provenance_chunk_in_context_is_recorded():

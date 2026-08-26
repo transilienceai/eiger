@@ -6,6 +6,8 @@ assistant to follow retrieved policy is what real RAG applications do, and it
 is also the whole vulnerability: the store is writable by anyone holding the
 ingest key, and the assistant cannot tell a policy note from an instruction.
 """
+import hashlib
+
 from halcyon import audit, treasury_corpus
 from halcyon.bank import Bank
 from halcyon.config import Settings
@@ -17,8 +19,46 @@ from halcyon.treasury_state import TreasurySession
 MAX_STEPS = 4
 MODULE = "chain"
 
-# What a citation shows for a seeded corpus document, in place of its text.
-SEEDED_CITATION_PLACEHOLDER = "treasury handbook — policy note"
+# Generic document-family names used to build a seeded chunk's citation. None
+# of these words appears anywhere in the seeded corpus (tests/test_treasury_
+# citations.py checks this against the live corpus, not just this list), so a
+# citation built from them can never repeat a word the underlying document
+# uses -- it names no topic, just a filing scheme.
+_REFERENCE_TITLES = [
+    "Policy Digest",
+    "Compliance Directive",
+    "Governance Bulletin",
+    "Standards Registry",
+    "Procedures Handbook",
+    "Framework Addendum",
+    "Advisory Codex",
+    "Charter Protocol",
+]
+
+
+def seeded_citation(text: str) -> str:
+    """Build the citation shown for a seeded corpus document.
+
+    A participant's only diagnostic after a review is the citation list, so a
+    seeded document still needs *a* reference -- just not its own text. This
+    derives a title, section and revision entirely from a hash of the
+    document's text: stable (same text always hashes the same way), distinct
+    (different text, different hash), and disconnected from both the
+    document's own wording and its position in the corpus -- so it carries no
+    hint about what the document says or which policy topic it belongs to.
+    """
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    n = int.from_bytes(digest, "big")
+    title = _REFERENCE_TITLES[n % len(_REFERENCE_TITLES)]
+    n //= len(_REFERENCE_TITLES)
+    section_major = 1 + (n % 20)
+    n //= 20
+    section_minor = 1 + (n % 12)
+    n //= 12
+    rev_year = 2021 + (n % 5)
+    n //= 5
+    rev_month = 1 + (n % 12)
+    return f"{title} §{section_major}.{section_minor} (rev {rev_year}-{rev_month:02d})"
 
 TREASURY_SYSTEM = (
     "You are the Eiger treasury approval assistant. Decide whether the pending item "
@@ -50,7 +90,7 @@ def review(
     policy = "\n".join(f"- {c.text}" for c in chunks)
     citations = [
         c.text if c.provenance == "user" and c.owner_session == session_id
-        else SEEDED_CITATION_PLACEHOLDER
+        else seeded_citation(c.text)
         for c in chunks
     ]
     messages: list[dict] = [
