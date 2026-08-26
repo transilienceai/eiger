@@ -22,6 +22,8 @@ class KnowledgeBase(Protocol):
     def retrieve(self, query: str, session_id: str, k: int = 3) -> list[Chunk]: ...
     def seed(self, fixtures: list[dict]) -> None: ...
     def clear(self) -> None: ...
+    def list_own(self, session_id: str) -> list["Chunk"]: ...
+    def delete_own(self, session_id: str, chunk_id: str) -> bool: ...
 
 
 @dataclass
@@ -51,3 +53,15 @@ class InMemoryKB:
     def clear(self) -> None:
         self._chunks = []
         self._seq = 0
+
+    def list_own(self, session_id: str) -> list[Chunk]:
+        return [c for c in self._chunks
+                if c.provenance == "user" and c.owner_session == session_id]
+
+    def delete_own(self, session_id: str, chunk_id: str) -> bool:
+        for i, c in enumerate(self._chunks):
+            if (c.id == chunk_id and c.provenance == "user"
+                    and c.owner_session == session_id):
+                del self._chunks[i]
+                return True
+        return False

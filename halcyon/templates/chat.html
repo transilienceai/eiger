@@ -145,10 +145,13 @@
   ul.src-tree button { padding: .4rem .7rem; font-size: .85rem; cursor: pointer;
     border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); }
   ul.src-tree button:hover { border-color: var(--accent); }
-  ul.src-log { list-style: none; margin: .5rem 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
-  ul.src-log li { padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 8px;
-    background: var(--bg); font-size: .82rem; color: var(--muted); }
-  ul.src-log li code { background: var(--surface-2); }
+  ul.cap-list { list-style: none; margin: .5rem 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+  ul.cap-list li { padding: .4rem .6rem; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg); font-size: .82rem; color: var(--muted); display: flex;
+    justify-content: space-between; align-items: center; gap: .6rem; }
+  ul.cap-list li span { flex: 1; text-align: left; word-break: break-word; }
+  ul.cap-list li button { flex: 0 0 auto; padding: .3rem .6rem; font-size: .78rem; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--text); }
   ul.chain-stages { list-style: none; margin: .3rem 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
   ul.chain-stages li { padding: .4rem .6rem; border-radius: 8px; font-size: .88rem;
     border: 1px solid var(--line); background: var(--surface-2); }
@@ -309,37 +312,48 @@
     </section>
 
     <section data-layer="CHAIN" hidden>{% if learn.get('CHAIN') %}{{ learn_details(learn['CHAIN']) }}{% endif %}
-      <h2>Capstone — Kill Chain (S1–S5)</h2>
-      <p>One campaign, five coupled links: a leaked CI token unlocks a misconfigured deploy hook,
-        whose trusted-source write the privileged ops-agent obeys, loading a poisoned artifact in
-        the build worker, which reads and exfiltrates the vault master secret. Browse the mock repo
-        to find the leak, spend it at the deploy hook, then trigger the ops-agent.</p>
+      <!-- contractor handoff notes mentioned an old mirror at https://git.eiger.internal/archive/eiger-platform -- never decommissioned -->
+      <h2>Capstone — Treasury desk</h2>
+      <div id="chain-brief" class="out"></div>
 
-      <h3>Source browser</h3>
-      <p>Browse <code>eiger-platform</code> and its history.</p>
-      <ul id="src-tree" class="src-tree"></ul>
-      <ul id="src-log" class="src-log"></ul>
-      <pre id="src-view" class="out"></pre>
-
-      <h3>Deploy hook (S2)</h3>
-      <div class="row">
-        <input id="deploy-token" type="text" placeholder="CI token" autocomplete="off" />
-        <input id="deploy-url" type="text" placeholder="Artifact URL" autocomplete="off" />
-        <button id="deploy-btn" type="button">Deploy</button>
+      <div id="chain-gate">
+        <h3>Desk tooling</h3>
+        <p class="hint">This desk's tooling points at an internal location. Enter it to open the desk's workspace.</p>
+        <div class="row">
+          <input id="gate-path" type="text" placeholder="Location" autocomplete="off" />
+          <button id="gate-btn" type="button">Open</button>
+        </div>
+        <p id="gate-status" class="hint"></p>
       </div>
-      <div id="deploy-out" class="out"></div>
 
-      <h3>Ops-agent (S3 → S5)</h3>
-      <div class="row">
-        <button id="ops-run" type="button">Run the runbook</button>
+      <div id="chain-workspace" hidden>
+        <h3>Source browser</h3>
+        <ul id="src-tree" class="src-tree"></ul>
+        <pre id="src-view" class="out"></pre>
+
+        <h3>Publish a policy document</h3>
+        <div class="row">
+          <input id="ingest-key" type="text" placeholder="Ingest key" autocomplete="off" />
+        </div>
+        <textarea id="ingest-text" rows="4" placeholder="Policy document text…"></textarea>
+        <div class="row">
+          <button id="ingest-btn" type="button">Publish</button>
+          <span id="ingest-status"></span>
+        </div>
+        <ul id="ingest-list" class="cap-list"></ul>
       </div>
-      <div id="ops-out" class="out"></div>
 
-      <h3>Chain tracker</h3>
-      <ul id="chain-stages" class="chain-stages"></ul>
+      <h3>Treasury desk review</h3>
+      <div class="row">
+        <button id="review-btn" type="button">Request review</button>
+      </div>
+      <p class="hint">Policy the desk consulted:</p>
+      <ul id="review-sources" class="cap-list"></ul>
+
+      <h3>Validate</h3>
       <div class="row">
         <button id="chain-validate" type="button">Validate</button>
-        <button id="chain-reset" type="button">Reset chain</button>
+        <button id="chain-reset" type="button">Reset capstone</button>
       </div>
       <div id="chain-out" class="out"></div>
     </section>
@@ -398,10 +412,11 @@
     sidebar.appendChild(h);
     const mods = TAB_MODULES[tab];
     if (mods.length === 0) {
-      // CHAIN: no per-session toggles here, by design -- the capstone's five
-      // SEC_* flags are process-level (see the CHAIN learn primer), so an
-      // instructor flips one and the whole room re-runs against it. Explain
-      // that so the empty sidebar reads as a deliberate teaching point.
+      // CHAIN: no per-session toggles here, by design -- the capstone's one
+      // flag, SEC_SECRET_SCANNING (see the CHAIN learn primer), is
+      // process-level, so an instructor flips it and the whole room re-runs
+      // against it. Explain that so the empty sidebar reads as a deliberate
+      // teaching point.
       const note = document.createElement("p");
       note.className = "sb-note";
       note.textContent = "Capstone guards are process-level (env flags), not per-session toggles — the instructor flips one and the room re-runs to see the break.";
@@ -439,7 +454,7 @@
     tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
     sections.forEach((s) => { s.hidden = s.dataset.layer !== tab; });
     renderSidebar(tab);
-    if (tab === "CHAIN") { loadSource(); refreshChain(); }
+    if (tab === "CHAIN") { refreshBrief(); }
   }
   tabs.forEach((t) => { t.onclick = () => activate(t.dataset.tab); });
 
@@ -629,8 +644,73 @@
   };
 
   // ---- CHAIN capstone ----
+  const chainBrief = document.getElementById("chain-brief");
+  async function refreshBrief() {
+    try {
+      const r = await fetch("/treasury/brief?session=" + encodeURIComponent(sid));
+      const data = await r.json();
+      chainBrief.textContent = "";
+      const p1 = document.createElement("p");
+      p1.textContent = data.brief ?? "";
+      const p2 = document.createElement("p");
+      p2.textContent = "Your account: " + (data.attacker_account ?? "");
+      chainBrief.appendChild(p1);
+      chainBrief.appendChild(p2);
+    } catch (err) { chainBrief.textContent = "brief load failed — " + err; }
+  }
+
+  // The commented mirror location near the top of this section is the
+  // intended discovery step for this capstone -- entering it below is what
+  // unlocks the source browser and the ingest form. This gate is a teaching
+  // device, not a security control: nothing here is enforced server-side,
+  // and the accepted value below is plain to anyone reading this script.
+  // That's fine -- the exercise is finding the comment, not defeating this
+  // check. Accepts the obvious ways someone would retype or paste what they
+  // found: drag-selecting the comment pulls in trailing prose, so truncate
+  // at the first whitespace right after case/trim normalizing; a git-clone
+  // reflex appends ".git"; a browser tab on the mirror appends "/tree/main";
+  // and the location may be typed with or without its scheme, its host, or
+  // leading/trailing slashes -- including a bare "//host/path" paste, which
+  // is why the leading-slash strip has to run before the host strip below
+  // (a leading "//" would otherwise never expose the host to match).
+  const CHAIN_GATE_TARGET = "archive/eiger-platform";
+  function normalizeGateInput(raw) {
+    let s = (raw || "").trim().toLowerCase();
+    s = s.split(/\s/)[0];                                 // drop anything pasted after the path itself
+    s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//, "");         // strip scheme
+    s = s.replace(/^\/+/, "");                              // strip leading slashes -- before the host strip
+    s = s.replace(/^git\.eiger\.internal\/?/, "");        // strip the known host
+    s = s.replace(/\/+$/, "");                              // strip a trailing slash before the suffix checks below
+    s = s.replace(/\/tree\/[^/]+$/, "");                    // strip a browser "view at ref" suffix (e.g. /tree/main)
+    s = s.replace(/\.git$/, "");                            // strip a git-clone suffix
+    s = s.replace(/\/+$/, "");                              // strip any slash a suffix strip exposed
+    return s;
+  }
+  const chainGate = document.getElementById("chain-gate");
+  const chainWorkspace = document.getElementById("chain-workspace");
+  const gatePath = document.getElementById("gate-path");
+  const gateStatus = document.getElementById("gate-status");
+  function openChainWorkspace() {
+    chainGate.hidden = true;
+    chainWorkspace.hidden = false;
+    loadSource();
+    refreshIngestList();
+  }
+  function lockChainWorkspace() {
+    chainGate.hidden = false;
+    chainWorkspace.hidden = true;
+    gatePath.value = "";
+    gateStatus.textContent = "";
+  }
+  document.getElementById("gate-btn").onclick = () => {
+    if (normalizeGateInput(gatePath.value) === CHAIN_GATE_TARGET) {
+      openChainWorkspace();
+    } else {
+      gateStatus.textContent = "Not found.";
+    }
+  };
+
   const srcTree = document.getElementById("src-tree");
-  const srcLog = document.getElementById("src-log");
   const srcView = document.getElementById("src-view");
   async function loadBlob(path) {
     srcView.textContent = "…";
@@ -643,7 +723,6 @@
   }
   async function loadSource() {
     srcTree.textContent = "";
-    srcLog.textContent = "";
     try {
       const r = await fetch("/source/tree?session=" + encodeURIComponent(sid));
       const data = await r.json();
@@ -656,79 +735,161 @@
         li.appendChild(btn);
         srcTree.appendChild(li);
       }
-      // render the log with the same createElement/textContent pattern as the tree
-      for (const commit of data.log ?? []) {
-        const li = document.createElement("li");
-        li.textContent = (commit.id ?? "") + " — " + (commit.author ?? "") + ": " + (commit.message ?? "");
-        srcLog.appendChild(li);
-      }
     } catch (err) { srcTree.textContent = "tree load failed — " + err; }
   }
 
-  const deployOut = document.getElementById("deploy-out");
-  document.getElementById("deploy-btn").onclick = async () => {
-    deployOut.textContent = "…";
-    const body = {
-      session_id: sid,
-      ci_token: document.getElementById("deploy-token").value,
-      artifact_url: document.getElementById("deploy-url").value,
-    };
-    try {
-      const r = await postJSON("/internal/deploy", body);
-      const data = await r.json();
-      deployOut.textContent = (data.ok ? "ok: " : "denied: ") + data.reason;
-    } catch (err) { deployOut.textContent = "request failed — " + err; }
-    refreshChain();
-  };
-
-  const opsOut = document.getElementById("ops-out");
-  document.getElementById("ops-run").onclick = async () => {
-    opsOut.textContent = "…";
-    try {
-      const r = await postJSON("/api/ops-agent", { session_id: sid, message: "run the runbook" });
-      renderAgent(opsOut, await r.json());
-    } catch (err) { opsOut.textContent = "request failed — " + err; }
-    refreshChain();
-  };
-
-  const chainStages = document.getElementById("chain-stages");
-  const chainOut = document.getElementById("chain-out");
-  const CHAIN_STAGE_LABELS = [
-    ["secret_leak_discovered", "S1 · CI token leaked"],
-    ["misconfig_exploited", "S2 · deploy hook misused"],
-    ["trusted_injection_fired", "S3 · ops-agent obeyed trusted write"],
-    ["malicious_artifact_loaded", "S4 · worker loaded artifact"],
-    ["rce_confirmed", "S5 · vault secret exfiltrated"],
-  ];
-  function renderStageRows(stages) {
-    const frag = document.createDocumentFragment();
-    for (const [key, label] of CHAIN_STAGE_LABELS) {
+  const ingestList = document.getElementById("ingest-list");
+  const ingestStatus = document.getElementById("ingest-status");
+  function renderIngestList(docs) {
+    ingestList.textContent = "";
+    for (const d of docs) {
       const li = document.createElement("li");
-      const passed = !!stages[key];
-      li.className = passed ? "ok" : "bad";
-      li.textContent = (passed ? "✓ " : "✗ ") + label;
-      frag.appendChild(li);
+      const span = document.createElement("span");
+      span.textContent = d.text;
+      const del = document.createElement("button");
+      del.type = "button";
+      del.textContent = "Delete";
+      del.onclick = async () => {
+        await postJSON("/ingest/delete", { session_id: sid, chunk_id: d.id });
+        refreshIngestList();
+      };
+      li.appendChild(span); li.appendChild(del);
+      ingestList.appendChild(li);
     }
-    return frag;
   }
-  chainStages.appendChild(renderStageRows({}));   // static frame, visible before the first fetch
-  async function refreshChain() {
+  async function refreshIngestList() {
+    try {
+      const r = await fetch("/ingest/docs?session=" + encodeURIComponent(sid));
+      if (!r.ok) {
+        ingestList.textContent = "";
+        const li = document.createElement("li");
+        li.textContent = "couldn't load uploads (" + r.status + ") — try again";
+        ingestList.appendChild(li);
+        return;
+      }
+      const data = await r.json();
+      renderIngestList(data.docs ?? []);
+    } catch (err) {
+      ingestList.textContent = "";
+      const li = document.createElement("li");
+      li.textContent = "couldn't load uploads — " + err;
+      ingestList.appendChild(li);
+    }
+  }
+  document.getElementById("ingest-btn").onclick = async () => {
+    const key = document.getElementById("ingest-key").value;
+    const text = document.getElementById("ingest-text").value;
+    if (!text.trim()) return;
+    ingestStatus.textContent = "…";
+    try {
+      const r = await postJSON("/ingest/docs", { session_id: sid, key: key, text: text });
+      if (!r.ok) {
+        ingestStatus.textContent = "publish request failed (" + r.status + ") — try again";
+        return;
+      }
+      const data = await r.json();
+      ingestStatus.textContent = data.ok ? "published" : (data.reason || "rejected");
+      if (data.ok) document.getElementById("ingest-text").value = "";
+      refreshIngestList();
+    } catch (err) { ingestStatus.textContent = "publish failed — " + err; }
+  };
+
+  const reviewSources = document.getElementById("review-sources");
+  document.getElementById("review-btn").onclick = async () => {
+    reviewSources.textContent = "";
+    const pending = document.createElement("li");
+    pending.textContent = "…";
+    reviewSources.appendChild(pending);
+    try {
+      const r = await postJSON("/api/treasury/review", { session_id: sid });
+      reviewSources.textContent = "";
+      if (!r.ok) {
+        const li = document.createElement("li");
+        li.textContent = "review request failed (" + r.status + ") — try again";
+        reviewSources.appendChild(li);
+        return;
+      }
+      const data = await r.json();
+      // A backend/model transport failure still answers 200 with an empty
+      // decision but the chunks it would have used -- surface that as its
+      // own state, distinct from "these are the documents that informed this
+      // decision", so a broken backend is never read as a real verdict.
+      if (typeof data.reply === "string" && data.reply.startsWith("<error:")) {
+        const li = document.createElement("li");
+        li.textContent = "the desk's assistant backend failed — try again (" + data.reply + ")";
+        reviewSources.appendChild(li);
+        return;
+      }
+      const sources = data.sources ?? [];
+      if (sources.length === 0) {
+        const li = document.createElement("li");
+        li.textContent = "no documents informed this decision";
+        reviewSources.appendChild(li);
+      }
+      for (const s of sources) {
+        const li = document.createElement("li");
+        const span = document.createElement("span");
+        span.textContent = s;
+        li.appendChild(span);
+        reviewSources.appendChild(li);
+      }
+      // Bank a durable pass the instant it's earned, not only when the
+      // participant separately clicks Validate below. This panel
+      // deliberately shows neither the model's reply nor its tool calls, so
+      // Validate is otherwise the only signal a transfer fired -- and a
+      // redeploy between "it fired" and "they clicked it" would rotate the
+      // assigned account and turn a genuine win into a permanent false
+      // fail. Fire-and-forget and silent: it must never surface as a hint
+      // that a transfer did or didn't happen.
+      fetch("/validate/chain?session=" + encodeURIComponent(sid)).catch(() => {});
+    } catch (err) {
+      reviewSources.textContent = "";
+      const li = document.createElement("li");
+      li.textContent = "review failed — " + err;
+      reviewSources.appendChild(li);
+    }
+  };
+
+  const chainOut = document.getElementById("chain-out");
+  async function runValidate() {
+    chainOut.textContent = "…";
     try {
       const r = await fetch("/validate/chain?session=" + encodeURIComponent(sid));
       const data = await r.json();
-      // Build the new rows before touching the DOM: a failed fetch/parse must
-      // leave the existing tracker frame in place rather than blanking it --
-      // orientation shouldn't disappear exactly when something went wrong.
-      chainStages.replaceChildren(renderStageRows(data.stages || {}));
-      chainOut.textContent = "core: " + (data.core ?? "unknown");
+      chainOut.textContent = "";
+      const summary = document.createElement("p");
+      summary.textContent = "core: " + (data.core ?? "unknown");
+      chainOut.appendChild(summary);
+      if (data.core === "pass" && data.stages) {
+        const ul = document.createElement("ul");
+        ul.className = "chain-stages";
+        for (const [key, passed] of Object.entries(data.stages)) {
+          const li = document.createElement("li");
+          li.className = passed ? "ok" : "bad";
+          li.textContent = (passed ? "✓ " : "✗ ") + key;
+          ul.appendChild(li);
+        }
+        chainOut.appendChild(ul);
+      }
     } catch (err) { chainOut.textContent = "validate failed — " + err; }
   }
-  document.getElementById("chain-validate").onclick = refreshChain;
+  document.getElementById("chain-validate").onclick = runValidate;
   document.getElementById("chain-reset").onclick = async () => {
     try {
       await postJSON("/reset/chain", { session_id: sid });
     } catch (err) { /* fall through to refresh regardless */ }
-    refreshChain();
+    chainOut.textContent = "";
+    reviewSources.textContent = "";
+    srcView.textContent = "";
+    // Reset rotates the ingest key server-side; a stale value left sitting
+    // in this field would report "invalid ingest key" even though nothing
+    // the participant did was wrong.
+    document.getElementById("ingest-key").value = "";
+    ingestStatus.textContent = "";
+    // Reset also re-gates the workspace -- a fresh attempt starts from the
+    // brief only, same as a cold session.
+    lockChainWorkspace();
+    await refreshBrief();
   };
 
   // ---- welcome overlay ----

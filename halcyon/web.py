@@ -14,20 +14,17 @@ from pydantic import BaseModel
 
 from halcyon import (
     agent, audit, bank_fixtures, capstone, dispute_pipeline, guards, halo, kb_fixtures,
-    learn_content, m4_answers, rag, source_browser,
+    learn_content, m4_answers, rag, source_browser, treasury_agent, treasury_corpus,
 )
 from halcyon.bank import Bank
-from halcyon.chain_agent import run_ops_agent
-from halcyon.chain_deploy import apply_deploy, handle_deploy
-from halcyon.chain_state import ChainProvider
-from halcyon.chain_worker import StubWorker
 from halcyon.config import MODULE_FLAGS, Settings, effective_settings
 from halcyon.kb import KnowledgeBase
 from halcyon.session_state import InMemorySessionState, SessionState
 from halcyon.llm import LLM, OllamaProvider, ToolLLM
 from halcyon.store import Store
-from halcyon.validators import m1, m2, m3, m4, m5, m6, m7, m8
+from halcyon.treasury_state import TreasuryProvider, TreasurySession
 from halcyon.validators import chain as chain_validator
+from halcyon.validators import m1, m2, m3, m4, m5, m6, m7, m8
 
 if TYPE_CHECKING:
     from halcyon.mcp_host import MCPHost
@@ -101,15 +98,22 @@ class ConfigIn(BaseModel):
     api_key: str | None = None
 
 
-class DeployIn(BaseModel):
+class IngestIn(BaseModel):
     session_id: str
-    ci_token: str
-    artifact_url: str
+    key: str
+    text: str
 
 
-class CallbackIn(BaseModel):
+class DeleteIn(BaseModel):
     session_id: str
-    secret: str
+    chunk_id: str
+
+
+class ReviewIn(BaseModel):
+    session_id: str
+    provider: str | None = None
+    model: str | None = None
+    api_key: str | None = None
 
 
 _VALIDATORS = {
@@ -133,7 +137,8 @@ def create_app(
     tool_llm_factory: ToolLLMFactory,
     mcp_host_factory: MCPHostFactory,
     session_state: SessionState | None = None,
-    chain_for: ChainProvider | None = None,
+    treasury_for: TreasuryProvider | None = None,
+    treasury_kb_for: Callable[[str], KnowledgeBase] | None = None,
 ) -> FastAPI:
     if settings.expose_openapi:
         app = FastAPI(title="Eiger")
@@ -154,14 +159,56 @@ def create_app(
         )
 
     sess: SessionState = session_state or InMemorySessionState()
+    treasury: TreasuryProvider = treasury_for or TreasuryProvider(
+        scenarios=treasury_corpus.SCENARIO_KEYS)
 
-    chain: ChainProvider = chain_for or ChainProvider()
+    def _treasury_kb(session_id: str) -> KnowledgeBase:
+        # The capstone gets its own RAG store (design spec, "own scenario, own
+        # store, own agent"). Falling back to kb_for here would silently
+        # reunite it with M3's: the agent would retrieve M3's corpus instead
+        # of treasury_corpus, /reset/chain would wipe M3's KB on every
+        # capstone reset, and M3's unauthenticated /api/kb would become a
+        # free bypass of the ingest-key gate this module exists to teach.
+        # Refuse loudly instead of reintroducing that bug quietly.
+        if treasury_kb_for is None:
+            raise RuntimeError(
+                "create_app() was called without treasury_kb_for: the treasury-heist "
+                "capstone (module \"chain\") requires its own KnowledgeBase provider, "
+                "separate from kb_for (M3's). Wire a second per-session provider seeded "
+                "with treasury_corpus.SEED -- see docs/plans/2026-08-24-"
+                "halcyon-s11-treasury-heist-capstone.md, Task 10."
+            )
+        return treasury_kb_for(session_id)
 
-    def _chain_report(session_id: str, secret: str) -> None:
-        audit.record(store, session_id, "chain", audit.RCE_CONFIRMED,
-                     session_id, {"secret": secret})
+    def _seed_treasury_bank(session_id: str, ts: TreasurySession) -> None:
+        """Seed the Bank with the two accounts the capstone actually reasons
+        about: the numeric attacker_account TreasuryProvider assigned this
+        session, and its scenario's own legit_account (treasury_corpus.py).
 
-    _worker = StubWorker(report=_chain_report)
+        bank_fixtures.seed_for() only knows the generic acct-me/acct-victim/
+        acct-attacker triad M5-M7 use, so without this bank.get(to) is always
+        None for both in production and transfer_funds's credit never lands
+        -- even though a participant who cracks the scenario is told their
+        money moved. Idempotent (only fills in what's missing), so it is
+        safe to call on every access, not just at mint: a reset rotates
+        attacker_account, and the next call seeds the new one without
+        disturbing a balance an earlier transfer already changed.
+        """
+        bank = bank_for(session_id)
+        scenario = treasury_corpus.SCENARIOS[ts.scenario]
+        for acct_id, owner in (
+            (ts.attacker_account, session_id),
+            (scenario.legit_account, "treasury-desk"),
+        ):
+            if bank.get(acct_id) is None:
+                bank.seed([{"id": acct_id, "owner_session": owner, "balance": 0, "email": ""}])
+
+    def _treasury(session_id: str) -> TreasurySession:
+        """Resolve this session's treasury state and ensure the Bank carries
+        the accounts it reasons about -- see _seed_treasury_bank."""
+        ts = treasury(session_id)
+        _seed_treasury_bank(session_id, ts)
+        return ts
 
     def _mcfg(
         session_id: str, p: str | None = None, m: str | None = None, k: str | None = None
@@ -253,7 +300,13 @@ def create_app(
     @app.get("/validate/{module}")
     def validate(module: str, session: str) -> dict:
         if module == "chain":
-            return chain_validator.validate(store, session, chain(session).vault_master)
+            # The account compared against is resolved server-side from the
+            # session's own TreasuryProvider state -- never from a request
+            # field. TREASURY_TRANSFER_EXECUTED is recorded for every
+            # transfer, including the benign one, so accepting an
+            # attacker_account from the caller would let a forged query
+            # string manufacture a pass.
+            return chain_validator.validate(store, session, _treasury(session).attacker_account)
         validator = _VALIDATORS.get(module)
         if validator is None:
             return {"error": f"unknown module {module}"}
@@ -263,7 +316,25 @@ def create_app(
     def reset(module: str, body: ResetIn) -> dict:
         store.write_reset_marker(body.session_id, module)
         if module == "chain":
-            chain.reset(body.session_id)
+            # Resolve the KB provider before mutating anything else: if
+            # treasury_kb_for was never wired, _treasury_kb() raises here,
+            # before the key/account are rotated -- not after. Failing here
+            # leaves the participant's existing key/account/corpus intact
+            # (modulo the generic reset marker above, shared by every
+            # module); failing after treasury.reset() would instead strand
+            # them with a rotated key, a rotated account, and a stale,
+            # un-reseeded corpus -- the half-reset this ordering avoids.
+            kb = _treasury_kb(body.session_id)
+            ts = treasury.reset(body.session_id)
+            kb.clear()
+            kb.seed(treasury_corpus.SEED)
+            # Re-seed the Bank for the freshly rotated account/scenario pair
+            # -- see _seed_treasury_bank. Without this, a reset leaves the
+            # Bank holding only the PREVIOUS attacker_account/legit_account,
+            # so the newly assigned pair silently has nowhere for credit to
+            # land until something else happens to call _treasury() first.
+            _seed_treasury_bank(body.session_id, ts)
+            return {"status": "reset", "module": "chain"}
         if module in ("m1", "m2"):
             sess.clear_history(body.session_id, "chat")
         if module == "m3":
@@ -455,53 +526,76 @@ def create_app(
 
     @app.get("/source/tree")
     def source_tree(session: str) -> dict:
-        return {"tree": source_browser.tree(), "log": source_browser.log()}
+        return {"tree": source_browser.tree()}
 
     @app.get("/source/blob")
     def source_blob(session: str, path: str) -> dict:
-        cs = chain(session)
-        content = guards.scrub_secrets(source_browser.blob(path, cs.ci_token),
-                                       cs.ci_token, settings)
-        if path == source_browser.LEAK_PATH and cs.ci_token and cs.ci_token in content:
-            audit.record(store, session, "chain", audit.SECRET_LEAK_DISCOVERED,
-                         session, {"path": path})
+        ts = _treasury(session)
+        content = guards.scrub_secrets(
+            source_browser.blob(path, ts.ingest_key), ts.ingest_key, settings)
         return {"path": path, "content": content}
 
-    @app.post("/internal/deploy")
-    def internal_deploy(body: DeployIn) -> dict:
-        cs = chain(body.session_id)
-        result = handle_deploy(cs, body.ci_token, body.artifact_url, settings)
-        if result.ok:
-            # Record MISCONFIG_EXPLOITED BEFORE mutating session state: a concurrent
-            # /api/ops-agent request can only observe session.trusted_write (and so
-            # fire TRUSTED_INJECTION_FIRED) once apply_deploy below has run, which is
-            # strictly after this audit event -- so the two events can never land
-            # out of order no matter how the requests interleave.
-            audit.record(store, body.session_id, "chain", audit.MISCONFIG_EXPLOITED,
-                         body.session_id, {"artifact_url": result.artifact_url})
-            apply_deploy(cs, result)
-        return {"ok": result.ok, "reason": result.reason}
+    @app.get("/treasury/brief")
+    def treasury_brief(session: str) -> dict:
+        ts = _treasury(session)
+        scenario = treasury_corpus.SCENARIOS[ts.scenario]
+        return {"brief": scenario.brief, "amount": scenario.amount,
+                "attacker_account": ts.attacker_account}
 
-    @app.post("/api/ops-agent")
-    def ops_agent(body: AgentIn) -> dict:
-        tool_llm = tool_llm_factory(*_mcfg(body.session_id, body.provider, body.model, body.api_key))
-        reply, calls = run_ops_agent(
-            tool_llm, body.session_id, body.message, chain(body.session_id),
-            _worker, store, settings)
-        return {"reply": reply, "tool_calls": [{"name": n, "args": a} for n, a, _ in calls]}
+    @app.post("/ingest/docs")
+    def ingest_doc(body: IngestIn) -> dict:
+        ts = _treasury(body.session_id)
+        if body.key != ts.ingest_key:
+            return {"ok": False, "reason": "invalid ingest key", "chunk_id": ""}
+        audit.record(store, body.session_id, "chain", audit.INGEST_KEY_ACCEPTED,
+                     body.session_id, {})
+        # owner_session must always be the caller's own session id, never blank
+        # -- an empty owner_session on a "user"-provenance chunk would be
+        # visible to list_own("").
+        chunk = _treasury_kb(body.session_id).add(
+            body.text, "user", owner_session=body.session_id)
+        audit.record(store, body.session_id, "chain", audit.POLICY_DOC_INGESTED,
+                     body.session_id, {"chunk": chunk.id})
+        return {"ok": True, "reason": "published", "chunk_id": chunk.id}
 
-    @app.post("/chain/callback")
-    def chain_callback(body: CallbackIn) -> dict:
-        # Phase 1 is dead code in practice (StubWorker.run calls _chain_report
-        # in-process; nothing HTTP-POSTs here yet), but this is the Phase-2 seam
-        # for a real worker container, so it must be gated now: an unauthenticated
-        # caller with the wrong secret must not be able to record rce_confirmed at
-        # all, since the validator's ordering check pins the *first* occurrence of
-        # each event -- one junk callback before a session starts would otherwise
-        # permanently brick that session's (and any session= it names) chain.
-        if body.secret != chain(body.session_id).vault_master:
-            return {"status": "rejected"}
-        _chain_report(body.session_id, body.secret)
-        return {"status": "received"}
+    @app.get("/ingest/docs")
+    def list_docs(session: str) -> dict:
+        docs = _treasury_kb(session).list_own(session)
+        return {"docs": [{"id": c.id, "text": c.text} for c in docs]}
+
+    @app.post("/ingest/delete")
+    def delete_doc(body: DeleteIn) -> dict:
+        return {"deleted": _treasury_kb(body.session_id).delete_own(
+            body.session_id, body.chunk_id)}
+
+    @app.post("/api/treasury/review")
+    def treasury_review(body: ReviewIn) -> dict:
+        tool_llm = tool_llm_factory(
+            *_mcfg(body.session_id, body.provider, body.model, body.api_key))
+        ts = _treasury(body.session_id)
+        reply, sources, calls = treasury_agent.review(
+            tool_llm, body.session_id, ts,
+            _treasury_kb(body.session_id), bank_for(body.session_id), store, settings)
+        # Bank a durable pass the moment it's earned, in the same request
+        # that executed the transfer -- not lazily, only when a participant
+        # later visits /validate/chain. TreasurySession is in-process and
+        # un-persisted, so a redeploy between "the transfer landed" and "the
+        # participant clicked Validate" rotates the assigned account and
+        # would otherwise turn a genuine win into a permanent false fail,
+        # recoverable only by redoing the whole attack. chain_validator.
+        # validate is idempotent (tests/test_validator_chain.py) -- calling
+        # it here has no effect beyond the durable marker itself when
+        # nothing was earned this call.
+        chain_validator.validate(store, body.session_id, ts.attacker_account)
+        # `reply` is a live echo channel: the model that produced it holds
+        # the full unredacted seeded policy text in its system prompt. The
+        # UI only ever reads it to detect the "<error: ...>" transport
+        # sentinel (a backend/model failure), so that's the only case it's
+        # returned at all -- never the model's actual decision text.
+        result: dict = {"sources": sources,
+                        "tool_calls": [{"name": n, "args": a} for n, a, _ in calls]}
+        if reply.startswith("<error:"):
+            result["reply"] = reply
+        return result
 
     return app

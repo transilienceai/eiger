@@ -55,3 +55,26 @@ class ChromaKB:
         self._client.delete_collection(self._name)
         self._collection = self._client.get_or_create_collection(self._name)
         self._seq = 0
+
+    def list_own(self, session_id: str) -> list[Chunk]:
+        got = self._collection.get(
+            where={"$and": [{"provenance": "user"}, {"owner_session": session_id}]}
+        )
+        ids = got.get("ids") or []
+        documents = got.get("documents") or []
+        metadatas = got.get("metadatas") or []
+        out = []
+        for chunk_id, text, metadata in zip(ids, documents, metadatas):
+            meta: Any = metadata or {}
+            out.append(Chunk(chunk_id, text, "user", str(meta.get("access", "public")),
+                             session_id))
+        out.sort(key=lambda c: c.id)
+        return out
+
+    def delete_own(self, session_id: str, chunk_id: str) -> bool:
+        # Scoped delete: the where-clause is the guard. A bare delete(ids=...)
+        # would let a caller remove documents that are not theirs.
+        if not any(c.id == chunk_id for c in self.list_own(session_id)):
+            return False
+        self._collection.delete(ids=[chunk_id])
+        return True

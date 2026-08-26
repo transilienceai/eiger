@@ -1,35 +1,46 @@
-"""Read-only mock 'eiger-platform' repo for the S10 kill-chain S1 leak.
+"""Read-only mock 'eiger-platform' repo — the leftover contractor repository.
 
-Deterministic, per-session: the leaked CI token is rendered into .env.sample at
-serve time (blob), so a reset that regenerates the token changes what leaks with
-no reseeding. The commit log tells a 'committed a token, reverted it' story that
-lures the participant into git history to find it in .env.sample.
+The ingest key is rendered into .env.sample at serve time, so a reset that
+rotates the key changes what leaks with no re-seeding. The key and the address
+it opens live in different files on purpose: reading one file is not enough.
 """
 
 LEAK_PATH = ".env.sample"
-LEAK_COMMIT = "a1b2c3d"
+INGEST_PATH = "deploy/ci.yml"
+INGEST_ROUTE = "/ingest/docs"
 
 _TREE = [
     ".env.sample",
     "README.md",
     "app.py",
     "deploy/ci.yml",
-]
-
-_LOG = [
-    {"id": "f0091ac", "author": "ravi@eiger.test",
-     "message": "chore: initial platform scaffold"},
-    {"id": LEAK_COMMIT, "author": "ci-bot@eiger.test",
-     "message": "Revert \"ci: hardcode deploy token in .env.sample (temporary)\" "
-                "-- token left in sample env, rotate later"},
-    {"id": "9d4e7b2", "author": "mira@eiger.test",
-     "message": "feat: add /internal/deploy hook for the build worker"},
+    "deploy/staging.env",
+    "docs/runbook.md",
+    "scripts/rotate_keys.sh",
+    "tests/test_smoke.py",
 ]
 
 _BENIGN = {
-    "README.md": "# eiger-platform\n\nInternal deployment tooling for Eiger.\n",
+    "README.md": (
+        "# eiger-platform\n\nInternal tooling for the Eiger treasury desk.\n"
+        "Contractor handover, archived. Do not deploy from this branch.\n"
+    ),
     "app.py": "def main() -> None:\n    print('eiger-platform')\n",
-    "deploy/ci.yml": "steps:\n  - run: python app.py\n  - run: curl -X POST $DEPLOY_URL\n",
+    "deploy/staging.env": (
+        "# staging only -- rotated quarterly\n"
+        "STAGING_API_TOKEN=stg_7f4c1b9a2e6d8f0c\n"
+        "STAGING_DB_URL=postgres://staging.internal/eiger\n"
+    ),
+    "docs/runbook.md": (
+        "# Runbook\n\nEscalate settlement failures to the treasury desk.\n"
+        "Policy documents are maintained by the operations team.\n"
+    ),
+    "scripts/rotate_keys.sh": (
+        "#!/usr/bin/env bash\n# quarterly rotation -- see SECRET_ROTATION_TOKEN in vault\n"
+        "SECRET_ROTATION_TOKEN=rot_0a1b2c3d4e5f6071\n"
+        "echo 'rotating'\n"
+    ),
+    "tests/test_smoke.py": "def test_smoke() -> None:\n    assert True\n",
 }
 
 
@@ -37,16 +48,20 @@ def tree() -> list[str]:
     return list(_TREE)
 
 
-def log() -> list[dict]:
-    return [dict(c) for c in _LOG]
-
-
-def blob(path: str, ci_token: str) -> str:
+def blob(path: str, ingest_key: str) -> str:
     if path == LEAK_PATH:
         return (
             "# Sample environment for eiger-platform.\n"
             "# NOTE: copy to .env and fill real values in prod.\n"
-            "DEPLOY_URL=http://build-worker.internal/internal/deploy\n"
-            f"EIGER_CI_TOKEN={ci_token}\n"
+            f"INGEST_KEY={ingest_key}\n"
+        )
+    if path == INGEST_PATH:
+        return (
+            "steps:\n"
+            "  - name: publish policy documents\n"
+            "    run: |\n"
+            f"      curl -X POST \"$EIGER_HOST{INGEST_ROUTE}\" \\\n"
+            "        -H \"x-ingest-key: $INGEST_KEY\" \\\n"
+            "        -d @policy.json\n"
         )
     return _BENIGN.get(path, "")

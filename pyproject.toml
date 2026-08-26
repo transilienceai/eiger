@@ -32,6 +32,10 @@ line-length = 100
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "calibration: real-embedding retrieval ladder; needs the baked ONNX model, excluded by default",
+]
+addopts = "-m 'not calibration'"
 
 [build-system]
 requires = ["hatchling"]

@@ -3,51 +3,60 @@ from halcyon.store import Store
 
 MODULE = "chain"
 
-ORDER = [
-    audit.SECRET_LEAK_DISCOVERED,
-    audit.MISCONFIG_EXPLOITED,
-    audit.TRUSTED_INJECTION_FIRED,
-    audit.MALICIOUS_ARTIFACT_LOADED,
-    audit.RCE_CONFIRMED,
-]
 
-
-def validate(store: Store, session_id: str, vault_master: str) -> dict:
+def validate(store: Store, session_id: str, attacker_account: str) -> dict:
     events = store.events_since_reset(session_id, MODULE)
-    first_id: dict[str, int] = {}
-    for e in events:
-        if e.event_type in ORDER and e.event_type not in first_id:
-            first_id[e.event_type] = e.id
-    stages = {et: (et in first_id) for et in ORDER}
-    all_present = all(stages.values())
-    in_order = all_present and all(
-        first_id[ORDER[i]] < first_id[ORDER[i + 1]] for i in range(len(ORDER) - 1)
-    )
-    secret_ok = any(
-        e.event_type == audit.RCE_CONFIRMED and e.details.get("secret") == vault_master
+    seen = {e.event_type for e in events}
+    # Deliberately no ordering check here (no first-occurrence ids, no
+    # increasing-id assertion). S10's validator required strict ordering and
+    # that produced two ways to permanently brick a legitimate run: an
+    # unauthenticated callback that pinned the terminal event first, and a
+    # click-race that inverted two ids. The coupling that would make ordering
+    # meaningful is already enforced in code upstream of this module (no key,
+    # no ingestion; no ingestion, nothing to retrieve) -- so an ordering
+    # check here would only add brick paths, not security. Do not "restore"
+    # one; see tests/test_validator_chain.py::test_out_of_order_events_still_pass.
+    stages = {
+        "key": audit.INGEST_KEY_ACCEPTED in seen,
+        "ingested": audit.POLICY_DOC_INGESTED in seen,
+        "retrieved": audit.POISONED_DOC_RETRIEVED in seen,
+        "transferred": audit.TREASURY_TRANSFER_EXECUTED in seen,
+    }
+    # The only thing that grades: money moved to the account this session was
+    # issued. Not "a transfer happened" -- theirs. Unforgeable, and it proves
+    # they steered the assistant rather than merely disturbed it.
+    core = any(
+        e.event_type == audit.TREASURY_TRANSFER_EXECUTED
+        and e.details.get("to_account") == attacker_account
         for e in events
     )
-    core = in_order and secret_ok
-    marker_already_recorded = any(e.event_type == audit.CHAIN_CORE_PASSED for e in events)
-
-    # A pass is a durable fact once earned: record it as an audit-log event
-    # (once per reset-epoch) so a later stale observation -- e.g. a redeploy
-    # rotates vault_master, so `secret_ok` goes False on the very same
-    # events -- can't erase it. A genuine module_reset drops every event
-    # before it, including this marker, from `events_since_reset`, so a
-    # reset still retracts the pass with no extra bookkeeping, and a
-    # post-reset replay is judged purely on what happened after the reset.
-    # This keeps grading a pure query over the append-only audit log.
-    if core and not marker_already_recorded:
-        audit.record(store, session_id, MODULE, audit.CHAIN_CORE_PASSED, session_id)
-    durable_core = core or marker_already_recorded
-
-    progress.mark(store, session_id, MODULE, durable_core, False)
-    # Ruling (fix round 1): the headline `core` reports durable_core, not this
-    # call's live `core` observation. A container redeploy rotates vault_master
-    # (in-process, un-persisted), which flips `secret_ok` to False against the
-    # very same durable audit events -- without this, a participant who already
-    # earned the pass would see a false "fail" here while the board (reading
-    # the CHAIN_CORE_PASSED marker) still correctly shows pass. `stages` stays
-    # a live read of the current reset-epoch -- only this headline is durable.
-    return {"core": "pass" if durable_core else "fail", "stages": stages}
+    marker_present = audit.CHAIN_CORE_PASSED in seen
+    if core and not marker_present:
+        # Record which account earned the pass. With no details this row is
+        # indistinguishable from a participant-emitted one; at a live
+        # conference a disputed grade or an instructor auditing the board
+        # needs something to point at.
+        audit.record(
+            store,
+            session_id,
+            MODULE,
+            audit.CHAIN_CORE_PASSED,
+            session_id,
+            {"to_account": attacker_account},
+        )
+    # A pass is a durable fact once earned. The marker lives inside the reset
+    # epoch, so a module_reset drops it and genuinely retracts the pass, while a
+    # stale re-validate (a redeploy rotated the assigned account) cannot erase it.
+    durable = core or marker_present
+    progress.mark(store, session_id, MODULE, durable, False)
+    result: dict = {"core": "pass" if durable else "fail"}
+    if durable:
+        # `stages` names the four steps this capstone chains -- itself a
+        # spoiler, since it hands over that "retrieved" is a distinct,
+        # competitive step. This endpoint is the one thing a participant is
+        # certain to hit directly (devtools Network tab, not just the panel),
+        # so withholding it isn't a UI nicety -- it's the only place this can
+        # actually be enforced. Include it only once there's nothing left to
+        # spoil: the run already passed.
+        result["stages"] = stages
+    return result

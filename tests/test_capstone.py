@@ -34,16 +34,16 @@ def test_multi_event_core_requires_all_events():
 
 
 def _validators():
-    # chain.validate has an extra required `vault_master` arg (it's not just an
-    # audit-event query -- see validators/chain.py). Wrap it to the same
+    # chain.validate has an extra required `attacker_account` arg (it's not just
+    # an audit-event query -- see validators/chain.py). Wrap it to the same
     # (store, session_id) -> {"core": ...} shape as every other validator; the
-    # dummy secret is irrelevant here because CORE_EVENTS["chain"] tests the
+    # dummy account is irrelevant here because CORE_EVENTS["chain"] tests the
     # *durable* CHAIN_CORE_PASSED marker path, which short-circuits the
-    # secret/order check once the marker itself is present (see module docstring).
+    # account/order check once the marker itself is present (see module docstring).
     return {
         "m1": m1.validate, "m2": m2.validate, "m3": m3.validate, "m4": m4.validate,
         "m5": m5.validate, "m6": m6.validate, "m7": m7.validate, "m8": m8.validate,
-        "chain": lambda store, sid: chain_validator.validate(store, sid, "irrelevant-vault-master"),
+        "chain": lambda store, sid: chain_validator.validate(store, sid, "irrelevant-account"),
     }
 
 

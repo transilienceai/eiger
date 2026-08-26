@@ -23,17 +23,25 @@ def test_progress_roundtrip():
     assert progress.read(s, "p1", "m1") == (True, True)
 
 
-def test_chain_event_constants_are_distinct():
+def test_s11_capstone_event_constants_are_distinct():
     from halcyon import audit
-    chain = [
-        audit.SECRET_LEAK_DISCOVERED,
-        audit.MISCONFIG_EXPLOITED,
-        audit.TRUSTED_INJECTION_FIRED,
-        audit.MALICIOUS_ARTIFACT_LOADED,
-        audit.RCE_CONFIRMED,
+    events = [
+        audit.INGEST_KEY_ACCEPTED,
+        audit.POLICY_DOC_INGESTED,
+        audit.POISONED_DOC_RETRIEVED,
+        audit.TREASURY_TRANSFER_EXECUTED,
+        audit.CHAIN_CORE_PASSED,
     ]
-    assert chain == [
-        "secret_leak_discovered", "misconfig_exploited", "trusted_injection_fired",
-        "malicious_artifact_loaded", "rce_confirmed",
+    assert events == [
+        "ingest_key_accepted", "policy_doc_ingested", "poisoned_doc_retrieved",
+        "treasury_transfer_executed", "chain_core_passed",
     ]
-    assert len(set(chain)) == 5
+    assert len(set(events)) == 5
+
+
+def test_s10_stage_constants_are_gone():
+    from halcyon import audit
+    for name in ("SECRET_LEAK_DISCOVERED", "MISCONFIG_EXPLOITED",
+                 "TRUSTED_INJECTION_FIRED", "MALICIOUS_ARTIFACT_LOADED",
+                 "RCE_CONFIRMED"):
+        assert not hasattr(audit, name), f"{name} should have been removed with S10"
