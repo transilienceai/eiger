@@ -1,6 +1,6 @@
 # Eiger — Build Status & Resume Guide
 
-**Last updated:** 2026-07-18 (end of session). **Read this first to resume.**
+**Last updated:** 2026-08-27. **Read this first to resume.**
 
 Companion docs: `README.md` (what Eiger is), `OPERATIONS.md` (deploy/run), `CLAUDE.md` in the parent `Blackhat` workspace (standing rules), `halcyon-lab-spec.md` (Blackhat workspace — the per-module source of truth), each slice's `docs/specs/*` + `docs/plans/*`.
 
@@ -10,9 +10,10 @@ Companion docs: `README.md` (what Eiger is), `OPERATIONS.md` (deploy/run), `CLAU
 
 - **What:** a deliberately-vulnerable single-app teaching lab for a 2-day Black Hat course on adversarial AI. Fictional AI-neobank **Eiger**; assistant **Iggy**. Attacked across six layers (L0→L5) that grow module by module. Participants **Build / Break / Secure** each layer.
 - **Repo:** `eiger`. Local: `/Users/kkmookhey/Projects/eiger`. Public remotes: `origin` = github.com/kkmookhey/eiger, `transilience` = github.com/transilienceai/eiger. Branch: `main`.
-- **Built so far:** **all 8 teaching modules, M1–M8 — ALL merged to `main`** (M8 merged 2026-07-18, HEAD `282dce8`). The complete L0→L5 attack surface (chatbot → RAG → agent → MCP → multi-agent → guardrails), each with a live end-to-end proof. **The teaching curriculum is code-complete.**
-- **Tests:** `181 passed, 4 skipped` (the 4 skips are the Postgres + ChromaDB + 2 MCP-over-HTTP integration tests, gated by `TEST_DATABASE_URL` / `RUN_CHROMA_TESTS` / `RUN_MCP_HTTP_TESTS`). Ruff + mypy clean.
-- **Next:** the **Ops fleet slice**, then the **module decks M2–M8** (deferred until the app was real).
+- **Built so far:** **all 8 teaching modules, M1–M8**, plus the S11 treasury-heist capstone. The complete L0→L5 attack surface (chatbot → RAG → agent → MCP → multi-agent → guardrails) has live end-to-end proofs. **The teaching curriculum is code-complete.**
+- **Learner UX:** the 2026-08-27 refresh adds stable browser sessions, plain-language **Vulnerable/Hardened** controls, module objectives, in-panel validation/reset, bounded model requests, and human-readable learner/class progress pages. JSON APIs remain compatible.
+- **Tests:** `340 passed, 5 skipped, 18 deselected`; Ruff + mypy clean. The skips/deselections are gated integration and calibration tests.
+- **Next:** browser visual QA of the learner refresh, then the remaining Ops/fleet and course-material work.
 
 ---
 

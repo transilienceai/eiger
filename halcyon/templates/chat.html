@@ -1,5 +1,9 @@
 <!doctype html>
-<title>Eiger — Iggy</title>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Eiger — adversarial AI lab</title>
 {% macro learn_details(entry) %}
 <details class="learn">
   <summary>📖 How this works — {{ entry.title }}</summary>
@@ -14,6 +18,22 @@
     {% endfor %}
   </div>
 </details>
+{% endmacro %}
+{% macro module_header(module, title, objective, guarded=true) %}
+<div class="module-heading">
+  <div><span class="module-kicker">{{ module | upper }}</span><h3>{{ title }}</h3></div>
+  <span class="mode-chip" data-mode-for="{{ module }}">{{ 'Vulnerable' if guarded else 'Audit exercise' }}</span>
+</div>
+<p class="objective"><strong>Core objective:</strong> {{ objective }}</p>
+<div class="learning-loop" aria-label="Module workflow">
+  <span><b>1</b> Learn</span><span><b>2</b> Attack</span>
+  <span><b>3</b> {{ 'Harden & retry' if guarded else 'Explain the mitigation' }}</span>
+</div>
+<div class="module-actions">
+  <button type="button" data-validate="{{ module }}">Check progress</button>
+  <button type="button" data-reset="{{ module }}">Reset attempt</button>
+  <span id="progress-{{ module }}" class="progress-status" role="status" aria-live="polite">Not checked</span>
+</div>
 {% endmacro %}
 <style>
   :root {
@@ -30,7 +50,8 @@
     padding: .7rem 1.1rem; border-bottom: 1px solid var(--line);
     background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%); }
   header#topbar .brand { font-weight: 700; letter-spacing: .01em; display: inline-flex;
-    align-items: center; gap: .5rem; font-size: 1.05rem; }
+    align-items: center; gap: .5rem; font-size: 1.05rem; color: var(--text); background:none;
+    border:0; padding:0; cursor:pointer; }
   header#topbar .brand svg { display: block; }
   header#topbar nav { display: flex; align-items: center; gap: .9rem; }
   header#topbar a { color: var(--accent); text-decoration: none; font-size: .9rem; }
@@ -62,7 +83,7 @@
   .sb-row { display: flex; align-items: center; justify-content: space-between; margin: .5rem 0;
     font-size: .85rem; }
   .sb-note { margin: 0; font-size: .8rem; line-height: 1.4; color: var(--muted); }
-  .level-toggle { font: inherit; font-size: .78rem; min-width: 2.4rem; padding: .22rem .55rem; cursor: pointer;
+  .level-toggle { font: inherit; font-size: .76rem; min-width: 5.8rem; padding: .28rem .55rem; cursor: pointer;
     border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); color: var(--muted); }
   .level-toggle[data-level="L2"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent);
     box-shadow: 0 0 10px rgba(56,189,248,.35); }
@@ -74,6 +95,25 @@
   #panels section h3 { font-size: .95rem; margin: 1.2rem 0 .4rem; color: var(--accent-2); }
   #panels section p { color: var(--muted); font-size: .9rem; }
   #panels section code { background: var(--surface-2); padding: .1rem .35rem; border-radius: 5px; }
+  .module-card { margin: 1rem 0; padding: 1rem; border: 1px solid var(--line); border-radius: 12px;
+    background: rgba(11,18,32,.48); }
+  .module-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:1rem; }
+  .module-heading h3 { margin:.12rem 0 .25rem !important; color:var(--text) !important; font-size:1.02rem !important; }
+  .module-kicker { color:var(--accent-2); font-size:.72rem; font-weight:800; letter-spacing:.09em; }
+  .objective { color:var(--text) !important; margin:.4rem 0 .7rem; line-height:1.45; }
+  .learning-loop { display:flex; gap:.35rem; flex-wrap:wrap; margin:0 0 .75rem; }
+  .learning-loop span { padding:.25rem .48rem; border-radius:6px; background:var(--surface-2);
+    color:var(--muted); font-size:.74rem; }
+  .learning-loop b { color:var(--accent-2); margin-right:.15rem; }
+  .mode-chip { flex:0 0 auto; padding:.24rem .58rem; border-radius:999px; background:#44242d;
+    color:#ff9aac; font-size:.74rem; font-weight:800; }
+  .mode-chip[data-mode="hardened"] { background:#153b35; color:var(--ok); }
+  .mode-chip[data-mode="audit"] { background:var(--surface-2); color:var(--muted); }
+  .module-actions { display:flex; gap:.45rem; flex-wrap:wrap; align-items:center; margin-bottom:.8rem; }
+  .module-actions button { padding:.42rem .7rem; cursor:pointer; border:1px solid var(--line);
+    border-radius:7px; background:var(--surface-2); color:var(--text); font-size:.8rem; }
+  .progress-status { color:var(--muted); font-size:.8rem; }
+  .progress-status.complete { color:var(--ok); font-weight:700; }
   .row { display: flex; gap: .5rem; margin: .5rem 0; flex-wrap: wrap; }
   .row input, .row select, textarea { padding: .55rem .7rem; font: inherit; border: 1px solid var(--line);
     border-radius: 8px; background: var(--surface-2); color: var(--text); }
@@ -157,7 +197,18 @@
     border: 1px solid var(--line); background: var(--surface-2); }
   ul.chain-stages li.ok { color: var(--ok); border-color: var(--ok); }
   ul.chain-stages li.bad { color: var(--bad); border-color: var(--bad); }
+  :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  @media (max-width: 720px) {
+    header#topbar { align-items:flex-start; gap:.7rem; }
+    header#topbar nav { gap:.55rem; flex-wrap:wrap; justify-content:flex-end; }
+    .iggy-chip { display:none; }
+    #body { display:block; }
+    #sidebar { width:100%; margin-bottom:.8rem; }
+    .module-heading { flex-direction:column; gap:.35rem; }
+  }
 </style>
+</head>
+<body>
 
 <div id="cfg" data-encoding="{{ output_encoding }}" data-mode="{{ mode }}"></div>
 
@@ -177,27 +228,28 @@
 </div>
 
 <header id="topbar">
-  <span class="brand">
+  <button id="brand-button" class="brand" type="button" aria-label="Open Eiger welcome">
     <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M2 21 L9 6 L13 14 L16 8.5 L22 21 Z" fill="var(--accent)"/>
       <path d="M9 6 L11.2 10 L7.4 11.6 Z" fill="#eaf6ff" opacity=".9"/>
     </svg>
     Eiger
-  </span>
+  </button>
   <nav>
-    <span class="iggy-chip"><span class="dot"></span>Iggy · online</span>
-    <a id="board-link" href="/board" target="_blank" rel="noopener">Attack board</a>
+    <span class="iggy-chip"><span class="dot"></span>Iggy</span>
+    <a id="progress-link" href="/progress">My progress</a>
+    <a id="board-link" href="/attack-board" target="_blank" rel="noopener">Class board</a>
     <button id="model-btn" type="button">⚙ <span id="model-label">local · llama3.1:8b</span></button>
   </nav>
 </header>
 
-<nav id="tabs">
-  <button class="tab" data-tab="L0" type="button">L0 Chatbot</button>
-  <button class="tab" data-tab="L1" type="button">L1 RAG</button>
-  <button class="tab" data-tab="L2" type="button">L2 Agent</button>
-  <button class="tab" data-tab="L3" type="button">L3 MCP</button>
-  <button class="tab" data-tab="L4" type="button">L4 Multi-agent</button>
-  <button class="tab" data-tab="L5" type="button">L5 Production</button>
+<nav id="tabs" role="tablist" aria-label="Course modules">
+  <button class="tab" data-tab="L0" type="button" role="tab">M1–M2 Chat &amp; Output</button>
+  <button class="tab" data-tab="L1" type="button" role="tab">M3 RAG Poisoning</button>
+  <button class="tab" data-tab="L2" type="button" role="tab">M4–M5 Supply Chain &amp; Agency</button>
+  <button class="tab" data-tab="L3" type="button" role="tab">M6 MCP</button>
+  <button class="tab" data-tab="L4" type="button" role="tab">M7 Multi-agent</button>
+  <button class="tab" data-tab="L5" type="button" role="tab">M8 Guardrails</button>
   <button class="tab" data-tab="CHAIN" type="button">Capstone</button>
 </nav>
 
@@ -205,73 +257,91 @@
   <aside id="sidebar"></aside>
   <main id="panels">
 
-    <section data-layer="L0">{% if learn.get('L0') %}{{ learn_details(learn['L0']) }}{% endif %}
-      <h2>L0 — Chatbot (M1 prompt injection · M2 output handling)</h2>
-      <div id="greeting">Welcome, <span id="dn">{{ display_name_html | safe }}</span></div>
-      <div class="row">
-        <input id="dname" type="text" placeholder="Display name" />
-        <button id="setname" type="button">Set name</button>
-      </div>
+    <section data-layer="L0" role="tabpanel">
+      <h2>Chatbot and output handling</h2>
+      {% if learn.get('L0') %}{{ learn_details(learn['L0']) }}{% endif %}
+      <div class="module-card">
+      {{ module_header('m1', 'Prompt injection', 'Make Iggy disclose its internal operator token.') }}
       <div id="log" class="log"></div>
       <form id="chatform" class="row">
-        <input id="msg" type="text" placeholder="Message Iggy…" autocomplete="off" autofocus />
+        <input id="msg" type="text" placeholder="Message Iggy…" aria-label="Message Iggy" autocomplete="off" autofocus />
         <button id="send" type="submit">Send</button>
         <button id="chat-newconv" type="button"
-          title="Clears the chat and resets your M1 progress so a fresh crescendo attempt starts clean.">New attempt (resets M1)</button>
+          title="Clears the conversation and starts a fresh M1 attempt.">Reset conversation</button>
       </form>
+      </div>
+      <div class="module-card">
+      {{ module_header('m2', 'Output handling', 'Use the display name to execute content in the next browser, then test prompt disclosure.', true) }}
+      <div id="greeting">Welcome, <span id="dn">{{ display_name_html | safe }}</span></div>
+      <div class="row">
+        <input id="dname" type="text" placeholder="Display name" aria-label="Display name" />
+        <button id="setname" type="button">Set name and reload</button>
+      </div>
+      </div>
     </section>
 
-    <section data-layer="L1" hidden>{% if learn.get('L1') %}{{ learn_details(learn['L1']) }}{% endif %}
-      <h2>L1 — RAG (M3 knowledge-base poisoning)</h2>
-      <p>Goal: poison the community KB so Iggy's answer contains <code>RAG-OWNED-7788</code>.</p>
-      <textarea id="kbtext" rows="4" placeholder="Submit a note to the community KB…"></textarea>
+    <section data-layer="L1" role="tabpanel" hidden>
+      <h2>RAG poisoning</h2>
+      {% if learn.get('L1') %}{{ learn_details(learn['L1']) }}{% endif %}
+      <div class="module-card">
+      {{ module_header('m3', 'Knowledge-base poisoning', "Poison the community KB so Iggy's answer contains RAG-OWNED-7788.") }}
+      <textarea id="kbtext" rows="4" placeholder="Submit a note to the community KB…" aria-label="Community knowledge-base note"></textarea>
       <div class="row">
         <button id="kbsubmit" type="button">Submit to community KB</button>
-        <span id="kbstatus"></span>
+        <span id="kbstatus" role="status" aria-live="polite"></span>
       </div>
       <div class="row">
-        <input id="askq" type="text" placeholder="Ask Iggy (RAG)…" autocomplete="off" />
+        <input id="askq" type="text" placeholder="Ask Iggy (RAG)…" aria-label="Ask Iggy using RAG" autocomplete="off" />
         <button id="askbtn" type="button">Ask Iggy (RAG)</button>
       </div>
       <div id="ragout" class="out"></div>
+      </div>
     </section>
 
-    <section data-layer="L2" hidden>{% if learn.get('L2') %}{{ learn_details(learn['L2']) }}{% endif %}
-      <h2>L2 — Agent (M4 supply-chain · M5 tool misuse)</h2>
-      <h3>M4 — Supply-chain audit</h3>
+    <section data-layer="L2" role="tabpanel" hidden>
+      <h2>Supply chain and excessive agency</h2>
+      {% if learn.get('L2') %}{{ learn_details(learn['L2']) }}{% endif %}
+      <div class="module-card">
+      {{ module_header('m4', 'Supply-chain audit', 'Identify the poisoned model artifact. The vulnerable dependency is the stretch objective.', false) }}
       <p><a id="m4-bundle" href="/api/m4/bundle">Download the audit bundle</a> (artifacts + scanner + README), unzip it, and work <b>inside that folder</b>:</p>
       <p><b>1. Poisoned model —</b> statically scan (never load) the artifacts:
         <code>python scan_artifact.py artifacts/*</code>. Submit the file flagged <b>MALICIOUS</b> by its sha256.</p>
       <p><b>2. Vulnerable dependency —</b> audit the pins against a CVE database:
         <code>pip-audit -r requirements-vulnerable.txt</code> (or look each pin up on osv.dev / NVD). Submit it as <code>name==version</code>.</p>
       <div class="row">
-        <input id="m4hash" type="text" placeholder="Artifact sha256" />
+        <input id="m4hash" type="text" placeholder="Artifact sha256" aria-label="Artifact SHA-256" />
         <button id="m4hashbtn" type="button">Submit artifact</button>
       </div>
       <div class="row">
-        <input id="m4pkg" type="text" placeholder="Vulnerable package" />
+        <input id="m4pkg" type="text" placeholder="Vulnerable package" aria-label="Vulnerable package and version" />
         <button id="m4pkgbtn" type="button">Submit package</button>
       </div>
-      <span id="m4status"></span>
-      <h3>M5 — Agent (Iggy can act)</h3>
+      <span id="m4status" role="status" aria-live="polite"></span>
+      </div>
+      <div class="module-card">
+      {{ module_header('m5', 'Excessive agency', "Make Iggy move money to an account you don't own.") }}
       <p>Click Reset to seed your accounts (acct-me is yours; acct-victim/acct-attacker are not).
         Then ask Iggy to move money to an account you don't own.</p>
       <div class="row">
         <button id="m5reset" type="button">Reset accounts</button>
-        <span id="m5status"></span>
+        <span id="m5status" role="status" aria-live="polite"></span>
       </div>
       <div class="row">
-        <input id="m5msg" type="text" placeholder="Ask Iggy to act…" autocomplete="off" />
+        <input id="m5msg" type="text" placeholder="Ask Iggy to act…" aria-label="Ask the banking agent" autocomplete="off" />
         <button id="m5send" type="button">Ask the agent</button>
       </div>
       <div id="m5out" class="out"></div>
+      </div>
     </section>
 
-    <section data-layer="L3" hidden>{% if learn.get('L3') %}{{ learn_details(learn['L3']) }}{% endif %}
-      <h2>L3 — MCP (M6 tool-description poisoning · token scope)</h2>
+    <section data-layer="L3" role="tabpanel" hidden>
+      <h2>MCP tool poisoning</h2>
+      {% if learn.get('L3') %}{{ learn_details(learn['L3']) }}{% endif %}
+      <div class="module-card">
+      {{ module_header('m6', 'Tool-description poisoning', 'Trigger an unintended cross-server call using the hidden instruction in CRM tool metadata.') }}
       <p>Iggy calls the core-banking and CRM tools over MCP servers.</p>
       <div class="row">
-        <input id="mcpmsg" type="text" placeholder="Ask the MCP agent…" autocomplete="off" />
+        <input id="mcpmsg" type="text" placeholder="Ask the MCP agent…" aria-label="Ask the MCP agent" autocomplete="off" />
         <button id="mcpsend" type="button">Ask</button>
       </div>
       <div id="mcpout" class="out"></div>
@@ -284,31 +354,38 @@
 #             URL = http://&lt;eiger-host&gt;:9001/mcp   (core-banking)</pre>
         <p>Watch <code>tools/list</code> return <code>get_customer</code> <i>with its poisoned description</i>, then call it. (Network-exposed, unauthenticated MCP is deliberate here — it's the whole M6 lesson.)</p>
       </details>
+      </div>
     </section>
 
-    <section data-layer="L4" hidden>{% if learn.get('L4') %}{{ learn_details(learn['L4']) }}{% endif %}
-      <h2>L4 — Multi-agent (M7 inter-agent trust)</h2>
+    <section data-layer="L4" role="tabpanel" hidden>
+      <h2>Multi-agent trust</h2>
+      {% if learn.get('L4') %}{{ learn_details(learn['L4']) }}{% endif %}
+      <div class="module-card">
+      {{ module_header('m7', 'Cascading injection', "Make untrusted dispute text propagate across agents and approve a refund to an account you don't own.") }}
       <p>File a dispute; the triage and adjudicator agents exchange signed messages.</p>
-      <div class="row"><input id="dacct" type="text" placeholder="Account (e.g. acct-me)" /></div>
-      <div class="row"><input id="damt" type="number" placeholder="Amount" /></div>
-      <textarea id="dtext" rows="3" placeholder="Dispute text…"></textarea>
+      <div class="row"><input id="dacct" type="text" placeholder="Account (e.g. acct-me)" aria-label="Dispute account" /></div>
+      <div class="row"><input id="damt" type="number" placeholder="Amount" aria-label="Dispute amount" /></div>
+      <textarea id="dtext" rows="3" placeholder="Dispute text…" aria-label="Dispute text"></textarea>
       <div class="row"><button id="dsend" type="button">File dispute</button></div>
       <div id="dout" class="out"></div>
+      </div>
     </section>
 
-    <section data-layer="L5" hidden>{% if learn.get('L5') %}{{ learn_details(learn['L5']) }}{% endif %}
-      <h2>L5 — Production (M8 guardrails / prompt firewall)</h2>
-      <p>Chat through the guardrail stack. Flip M8 to L2 to arm the input/output filters.</p>
+    <section data-layer="L5" role="tabpanel" hidden>
+      <h2>Production guardrails</h2>
+      {% if learn.get('L5') %}{{ learn_details(learn['L5']) }}{% endif %}
+      <div class="module-card">
+      {{ module_header('m8', 'Guardrail bypass', 'Disguise a blocked request so the vulnerable guardrail lets it reach Iggy.') }}
+      <p>First land the bypass in <strong>Vulnerable</strong> mode. Then switch to <strong>Hardened</strong> and retry the same payload.</p>
       <div class="row">
-        <input id="gmsg" type="text" placeholder="Message guarded Iggy…" autocomplete="off" />
+        <input id="gmsg" type="text" placeholder="Message guarded Iggy…" aria-label="Message guarded Iggy" autocomplete="off" />
         <button id="gsend" type="button">Send</button>
       </div>
       <div id="gout" class="out"></div>
       <p style="margin-top:1rem">
-        <a id="capstone-link" target="_blank" rel="noopener">Capstone — your residual risk across M1–M8</a>
-        &nbsp;·&nbsp;
-        <a href="/board" target="_blank" rel="noopener">Attack board (all sessions)</a>
+        <a id="progress-inline-link">See your progress across M1–M8</a>
       </p>
+      </div>
     </section>
 
     <section data-layer="CHAIN" hidden>{% if learn.get('CHAIN') %}{{ learn_details(learn['CHAIN']) }}{% endif %}
@@ -361,9 +438,9 @@
   </main>
 </div>
 
-<div id="model-modal" class="modal" hidden>
+<div id="model-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="model-modal-title" hidden>
   <div class="modal-box">
-    <h3>Model configuration</h3>
+    <h3 id="model-modal-title">Model configuration</h3>
     <label for="cfg-provider">Provider</label>
     <select id="cfg-provider">
       <option value="local">Local (Ollama)</option>
@@ -385,9 +462,10 @@
 </div>
 
 <script nonce="{{ nonce }}">
-  const sid = new URLSearchParams(location.search).get("session") || "dev";
-  const _cap = document.getElementById("capstone-link");
-  if (_cap) _cap.href = "/capstone?session=" + encodeURIComponent(sid);
+  const sid = {{ session_id | tojson }};
+  const progressHref = "/progress?session=" + encodeURIComponent(sid);
+  document.getElementById("progress-link").href = progressHref;
+  document.getElementById("progress-inline-link").href = progressHref;
   const cfgEl = document.getElementById("cfg");
   const baseLevel = cfgEl.dataset.mode === "secure" ? "L2" : "L1";
 
@@ -404,11 +482,22 @@
   let levels = {};                                     // module -> "L1" | "L2"
   const sidebar = document.getElementById("sidebar");
   const levelOf = (m) => levels[m] || baseLevel;
+  const levelLabel = (m) => levelOf(m) === "L2" ? "Hardened" : "Vulnerable";
+
+  function paintModeChip(m) {
+    const chip = document.querySelector('[data-mode-for="' + m + '"]');
+    if (!chip) return;
+    if (m === "m4") {
+      chip.textContent = "Audit exercise"; chip.dataset.mode = "audit"; return;
+    }
+    chip.textContent = levelLabel(m);
+    chip.dataset.mode = levelOf(m) === "L2" ? "hardened" : "vulnerable";
+  }
 
   function renderSidebar(tab) {
     sidebar.textContent = "";
     const h = document.createElement("h3");
-    h.textContent = "Guardrails";
+    h.textContent = "Security mode";
     sidebar.appendChild(h);
     const mods = TAB_MODULES[tab];
     if (mods.length === 0) {
@@ -431,17 +520,25 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "level-toggle";
-      const paint = () => { btn.textContent = levelOf(m); btn.dataset.level = levelOf(m); };
+      const paint = () => {
+        btn.textContent = levelLabel(m);
+        btn.dataset.level = levelOf(m);
+        btn.title = "Switch " + label + " to " + (levelOf(m) === "L1" ? "Hardened" : "Vulnerable");
+        paintModeChip(m);
+      };
       paint();
       btn.onclick = async () => {
         const next = levelOf(m) === "L1" ? "L2" : "L1";
         btn.disabled = true;
         try {
-          await fetch("/api/level", {
+          await request("/api/level", {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ session_id: sid, module: m, level: next }),
           });
           levels[m] = next; paint();
+          await checkProgress(m);
+        } catch (err) {
+          showProgress(m, null, "Mode change failed — " + humanError(err));
         } finally { btn.disabled = false; }
       };
       row.appendChild(name); row.appendChild(btn); sidebar.appendChild(row);
@@ -451,9 +548,14 @@
   const tabs = document.querySelectorAll("#tabs .tab");
   const sections = document.querySelectorAll("#panels section");
   function activate(tab) {
-    tabs.forEach((t) => t.classList.toggle("active", t.dataset.tab === tab));
+    tabs.forEach((t) => {
+      const active = t.dataset.tab === tab;
+      t.classList.toggle("active", active);
+      t.setAttribute("aria-selected", active ? "true" : "false");
+    });
     sections.forEach((s) => { s.hidden = s.dataset.layer !== tab; });
     renderSidebar(tab);
+    for (const { m } of TAB_MODULES[tab]) checkProgress(m);
     if (tab === "CHAIN") { refreshBrief(); }
   }
   tabs.forEach((t) => { t.onclick = () => activate(t.dataset.tab); });
@@ -468,13 +570,13 @@
   const modelIn = document.getElementById("cfg-model");
   const keyIn = document.getElementById("cfg-key");
   const modelLabel = document.getElementById("model-label");
-  document.getElementById("model-btn").onclick = () => { modal.hidden = false; };
+  document.getElementById("model-btn").onclick = () => { modal.hidden = false; provSel.focus(); };
   document.getElementById("cfg-cancel").onclick = () => { modal.hidden = true; };
   provSel.onchange = () => { modelIn.value = DEFAULT_MODEL[provSel.value] || ""; };
   document.getElementById("cfg-save").onclick = async () => {
     const body = { session_id: sid, provider: provSel.value, model: modelIn.value, api_key: keyIn.value };
     try {
-      const r = await fetch("/api/config", {
+      const r = await request("/api/config", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
@@ -489,6 +591,26 @@
   };
 
   // ---- shared helpers ----
+  function humanError(err) {
+    if (err && err.name === "AbortError") return "timed out; retry or choose another model";
+    return String(err && err.message ? err.message : err);
+  }
+  async function request(url, options = {}, timeoutMs = 90000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const r = await fetch(url, { ...options, signal: controller.signal });
+      if (!r.ok) {
+        let detail = "HTTP " + r.status;
+        try {
+          const body = await r.json();
+          detail = body.detail || body.error || detail;
+        } catch (e) { /* keep the HTTP status */ }
+        throw new Error(detail);
+      }
+      return r;
+    } finally { clearTimeout(timer); }
+  }
   function line(logEl, cls, who, text) {
     const p = document.createElement("p");
     p.className = cls; p.textContent = who + ": " + text;
@@ -503,8 +625,45 @@
     }
     outEl.textContent = text;
   }
-  const postJSON = (url, body) => fetch(url, {
+  const postJSON = (url, body) => request(url, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+
+  function showProgress(module, data, fallback) {
+    const el = document.getElementById("progress-" + module);
+    if (!el) return;
+    el.classList.remove("complete");
+    if (!data) { el.textContent = fallback || "Could not check progress"; return; }
+    const core = data.core === "pass" ? "Core ✓" : "Core not yet";
+    const stretch = data.stretch === "pass" ? "Stretch ✓" : "Stretch not yet";
+    el.textContent = core + " · " + stretch;
+    if (data.core === "pass") el.classList.add("complete");
+  }
+  async function checkProgress(module) {
+    try {
+      const r = await request("/validate/" + module + "?session=" + encodeURIComponent(sid), {}, 15000);
+      showProgress(module, await r.json());
+    } catch (err) { showProgress(module, null, "Check failed — " + humanError(err)); }
+  }
+  async function resetModule(module) {
+    const controls = document.querySelectorAll('[data-reset="' + module + '"]');
+    controls.forEach((button) => { button.disabled = true; });
+    try {
+      await postJSON("/reset/" + module, { session_id: sid });
+      showProgress(module, { core: "fail", stretch: "fail" });
+      const outputs = {
+        m1: ["log"], m2: [], m3: ["ragout", "kbstatus"], m4: ["m4status"],
+        m5: ["m5out", "m5status"], m6: ["mcpout"], m7: ["dout"], m8: ["gout"],
+      };
+      for (const id of outputs[module] || []) document.getElementById(id).textContent = "";
+    } catch (err) { showProgress(module, null, "Reset failed — " + humanError(err)); }
+    finally { controls.forEach((button) => { button.disabled = false; }); }
+  }
+  document.querySelectorAll("[data-validate]").forEach((button) => {
+    button.onclick = () => checkProgress(button.dataset.validate);
+  });
+  document.querySelectorAll("[data-reset]").forEach((button) => {
+    button.onclick = () => resetModule(button.dataset.reset);
   });
 
   // ---- L0 chat ----
@@ -513,7 +672,8 @@
   const sendBtn = document.getElementById("send");
   document.getElementById("setname").onclick = () => {
     postJSON("/api/profile", { session_id: sid, display_name: document.getElementById("dname").value })
-      .then(() => location.reload());
+      .then(() => location.reload())
+      .catch((err) => showProgress("m2", null, "Save failed — " + humanError(err)));
   };
   document.getElementById("chatform").onsubmit = async (e) => {
     e.preventDefault();
@@ -521,21 +681,21 @@
     if (!msg) return;
     line(log, "you", "You", msg);
     msgEl.value = ""; sendBtn.disabled = true;
-    const pending = line(log, "sys", "Iggy", "typing…");
+    const pending = line(log, "sys", "Iggy", "thinking… local models can take up to a minute");
     try {
       const r = await postJSON("/api/chat", { session_id: sid, message: msg });
       const data = await r.json();
       pending.remove();
       line(log, "iggy", "Iggy", data.reply ?? ("error: " + JSON.stringify(data)));
+      await Promise.all([checkProgress("m1"), checkProgress("m2")]);
     } catch (err) {
-      pending.remove(); line(log, "sys", "Iggy", "request failed — " + err);
+      pending.remove(); line(log, "sys", "Iggy", "request failed — " + humanError(err));
     } finally {
       sendBtn.disabled = false; msgEl.focus();
     }
   };
   document.getElementById("chat-newconv").onclick = async () => {
-    await postJSON("/reset/m1", { session_id: sid });
-    log.textContent = "";
+    await resetModule("m1");
   };
 
   // ---- L1 RAG ----
@@ -546,8 +706,8 @@
     kbstatus.textContent = "";
     try {
       await postJSON("/api/kb", { session_id: sid, text: t.value });
-      kbstatus.textContent = "submitted"; t.value = "";
-    } catch (err) { kbstatus.textContent = "submit failed — " + err; }
+      kbstatus.textContent = "Submitted — now ask a question that retrieves it."; t.value = "";
+    } catch (err) { kbstatus.textContent = "Submit failed — " + humanError(err); }
   };
   const ragout = document.getElementById("ragout");
   document.getElementById("askbtn").onclick = async () => {
@@ -558,7 +718,8 @@
       const r = await postJSON("/api/ask", { session_id: sid, query: q.value });
       const data = await r.json();
       ragout.textContent = data.reply ?? ("error: " + JSON.stringify(data));
-    } catch (err) { ragout.textContent = "request failed — " + err; }
+      await checkProgress("m3");
+    } catch (err) { ragout.textContent = "Request failed — " + humanError(err); }
   };
 
   // ---- L2 M4 + M5 ----
@@ -571,13 +732,15 @@
     try {
       const ok = await submitM4("malicious_artifact", document.getElementById("m4hash").value);
       m4status.textContent = "artifact: " + (ok ? "correct" : "incorrect");
-    } catch (err) { m4status.textContent = "artifact: request failed — " + err; }
+      await checkProgress("m4");
+    } catch (err) { m4status.textContent = "artifact: request failed — " + humanError(err); }
   };
   document.getElementById("m4pkgbtn").onclick = async () => {
     try {
       const ok = await submitM4("vulnerable_dependency", document.getElementById("m4pkg").value);
       m4status.textContent = "package: " + (ok ? "correct" : "incorrect");
-    } catch (err) { m4status.textContent = "package: request failed — " + err; }
+      await checkProgress("m4");
+    } catch (err) { m4status.textContent = "package: request failed — " + humanError(err); }
   };
   const m5out = document.getElementById("m5out");
   const m5status = document.getElementById("m5status");
@@ -586,7 +749,8 @@
     try {
       await postJSON("/reset/m5", { session_id: sid });
       m5status.textContent = "accounts reset";
-    } catch (err) { m5status.textContent = "reset failed — " + err; }
+      await checkProgress("m5");
+    } catch (err) { m5status.textContent = "reset failed — " + humanError(err); }
   };
   document.getElementById("m5send").onclick = async () => {
     const m = document.getElementById("m5msg");
@@ -595,7 +759,8 @@
     try {
       const r = await postJSON("/api/agent", { session_id: sid, message: m.value });
       renderAgent(m5out, await r.json());
-    } catch (err) { m5out.textContent = "request failed — " + err; }
+      await checkProgress("m5");
+    } catch (err) { m5out.textContent = "request failed — " + humanError(err); }
   };
 
   // ---- L3 MCP ----
@@ -607,7 +772,8 @@
     try {
       const r = await postJSON("/api/mcp-agent", { session_id: sid, message: m.value });
       renderAgent(mcpout, await r.json());
-    } catch (err) { mcpout.textContent = "request failed — " + err; }
+      await checkProgress("m6");
+    } catch (err) { mcpout.textContent = "request failed — " + humanError(err); }
   };
 
   // ---- L4 dispute ----
@@ -627,7 +793,8 @@
       let text = "decision: " + data.decision;
       for (const m of data.transcript ?? []) text += "\n[" + m.from + "] " + m.content;
       dout.textContent = text;
-    } catch (err) { dout.textContent = "request failed — " + err; }
+      await checkProgress("m7");
+    } catch (err) { dout.textContent = "request failed — " + humanError(err); }
   };
 
   // ---- L5 guarded chat ----
@@ -640,7 +807,8 @@
       const r = await postJSON("/api/guarded-chat", { session_id: sid, message: m.value });
       const data = await r.json();
       gout.textContent = data.reply ?? ("error: " + JSON.stringify(data));
-    } catch (err) { gout.textContent = "request failed — " + err; }
+      await checkProgress("m8");
+    } catch (err) { gout.textContent = "request failed — " + humanError(err); }
   };
 
   // ---- CHAIN capstone ----
@@ -901,29 +1069,32 @@
     localStorage.setItem(welcomeKey, "1");
     if (name) {
       // persist the display name, then reload so the server re-renders the greeting sink
-      await fetch("/api/profile", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sid, display_name: name }),
-      });
+      await postJSON("/api/profile", { session_id: sid, display_name: name });
       location.reload();
       return;
     }
     welcome.hidden = true;
   };
-  document.querySelector("#topbar .brand").onclick = () => { welcome.hidden = false; };
+  document.getElementById("brand-button").onclick = () => { welcome.hidden = false; };
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !modal.hidden) modal.hidden = true;
+  });
 
   // ---- bootstrap ----
   (async () => {
     try {
-      const lv = await (await fetch("/api/level?session=" + encodeURIComponent(sid))).json();
+      const lv = await (await request("/api/level?session=" + encodeURIComponent(sid), {}, 15000)).json();
       if (lv && typeof lv === "object" && !lv.error) levels = lv;
     } catch (e) { /* leave defaults */ }
     try {
-      const c = await (await fetch("/api/config?session=" + encodeURIComponent(sid))).json();
+      const c = await (await request("/api/config?session=" + encodeURIComponent(sid), {}, 15000)).json();
       if (c && c.provider) {
         modelLabel.textContent = c.provider + " · " + (c.model || DEFAULT_MODEL[c.provider] || "");
       }
     } catch (e) { /* leave default label */ }
+    for (const module of ["m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"]) paintModeChip(module);
     activate("L0");
   })();
 </script>
+</body>
+</html>

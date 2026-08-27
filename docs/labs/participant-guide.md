@@ -13,12 +13,13 @@ Each module is **Build → Break → Secure**:
 
 ## How the lab works
 
-- **Your instance:** `http://localhost:8000/` (or the URL your instructor gives you). The landing page is your **reach test** — App / Ollama / Store pills should be green.
-- **Your session:** pick a `session_id` (e.g. your name) and use it consistently. Your progress is tracked per session.
-- **Check your progress:** `GET /validate/{module}?session=<you>` returns `{"core": "pass"|"fail", "stretch": "pass"|"fail"}`. Each module has a **core** objective (required) and a **stretch** (bonus).
-- **Start over any time:** `POST /reset/{module}` with body `{"session_id":"<you>"}` gives you a clean slate. Validation only counts what you do *after* your latest reset.
+- **Your instance:** `http://localhost:8000/` (or the URL your instructor gives you). The readiness screen checks the app, model, progress tracking, and MCP tools before you begin.
+- **Your session:** Eiger creates and preserves your session automatically. It appears on the readiness and progress screens; keep the same lab URL throughout the course.
+- **Check your progress:** every module has a **Check progress** control. **My progress** in the header shows the whole course. Each module has a **core** objective (required) and a **stretch** (bonus).
+- **Start over any time:** use **Reset attempt** in the module card. Validation only counts what you do *after* your latest reset.
 - **Grading is mechanism-based.** The app watches for the *security event* your attack causes — not the wording of Iggy's reply. So a reply that "looks hacked" isn't a pass, and a boring-looking reply can be a pass. Trust `/validate`.
-- **Which modules have a UI:** `/chat` is a **tabbed app with a panel for every layer (L0–L5)** — all modules have UI panels, plus a left **guardrail sidebar** (flip a module L1↔L2, no restart) and a **model-config** button (pick a provider/model, paste your own key). A **welcome screen** takes your display name on entry. You can also drive any module with `curl`.
+- **Vulnerable → Hardened:** the left sidebar names the active security state directly. Land the attack in **Vulnerable**, switch that module to **Hardened**, and retry the identical payload—no restart required.
+- **Advanced/API use:** every UI action still has a corresponding endpoint. `GET /validate/{module}?session=<you>` and `POST /reset/{module}` remain available for Burp and `curl` exercises.
 - **Model:** Day 1 (M1–M4) runs on a shared keyless model. Day 2 (M5–M8) you *may* plug in your own API key for more reliable results (most work without one; your instructor will say where a key helps).
 
 > **Tip:** obvious, direct asks usually get refused. Indirection, disguise, and encoding are your friends throughout.

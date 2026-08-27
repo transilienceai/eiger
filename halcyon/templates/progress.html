@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Eiger — my progress</title>
+<style>
+  :root { --bg:#0b1220; --surface:#121b2d; --surface2:#1a2437; --line:#26324a;
+    --text:#e6ecf5; --muted:#8ea3c0; --accent:#38bdf8; --ok:#34d399; --bad:#fb7185; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; padding:2rem 1rem; font-family:system-ui,sans-serif;
+    color:var(--text); background:radial-gradient(1100px 550px at 50% -10%,#14304a 0%,var(--bg) 60%); }
+  main { max-width:900px; margin:auto; }
+  header { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:1.5rem; }
+  a { color:var(--accent); } h1 { margin:.2rem 0; } .muted { color:var(--muted); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(245px,1fr)); gap:.8rem; }
+  article { border:1px solid var(--line); border-radius:12px; background:var(--surface); padding:1rem; }
+  article h2 { font-size:1rem; margin:0 0 .35rem; text-transform:capitalize; }
+  .mode { display:inline-block; padding:.18rem .55rem; border-radius:999px; background:var(--surface2);
+    color:var(--muted); font-size:.76rem; font-weight:700; }
+  dl { display:grid; grid-template-columns:1fr auto; gap:.4rem; margin:.8rem 0 0; font-size:.88rem; }
+  dt,dd { margin:0; } .pass { color:var(--ok); font-weight:700; } .fail { color:var(--muted); }
+  .chain { margin-top:1rem; border-color:#facc15; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><p class="muted">Eiger · session {{ session_id }}</p><h1>Your progress</h1></div>
+    <a href="/chat?session={{ session_id | urlencode }}">← Back to the lab</a>
+  </header>
+  <p class="muted">Core is the required attack objective. Stretch is the bonus or defence objective for that module.</p>
+  <section class="grid">
+    {% for row in rows %}
+    <article>
+      <span class="mode">{{ row.mode }}</span>
+      <h2>{{ row.module }} · {{ row.title }}</h2>
+      <dl>
+        <dt>Core objective</dt><dd class="{{ 'pass' if row.core == 'pass' else 'fail' }}">{{ 'Complete' if row.core == 'pass' else 'Not yet' }}</dd>
+        <dt>Stretch objective</dt><dd class="{{ 'pass' if row.stretch == 'pass' else 'fail' }}">{{ 'Complete' if row.stretch == 'pass' else 'Not yet' }}</dd>
+      </dl>
+    </article>
+    {% endfor %}
+  </section>
+  <article class="chain">
+    <h2>Capstone · {{ chain.attack }}</h2>
+    <p class="{{ 'pass' if chain.exploited else 'fail' }}">{{ 'Complete' if chain.exploited else 'Not yet' }}</p>
+  </article>
+</main>
+</body>
+</html>

@@ -53,12 +53,12 @@ Everything runs from Docker Compose — the same images as the hosted lab. **Pre
 git clone https://github.com/kkmookhey/eiger && cd eiger
 docker compose up -d --build                          # web, db, ollama, 2 MCP servers
 docker compose exec ollama ollama pull llama3.1:8b    # first run only (~4.9 GB)
-open http://localhost:8000/                           # reach-test → then the tabbed lab UI at /chat
+open http://localhost:8000/                           # readiness check → learner-guided lab UI
 ```
 
 - **Day-1 modules** (L0 chatbot, L1 RAG) run **keyless** on the local Ollama.
 - **Day-2 modules** (L2 agent, L3 MCP, L4 multi-agent) are **BYOK** — paste an OpenAI/Anthropic key in the UI (frontier models chain tool calls reliably; the keyless model shows the plumbing).
-- Per-module **reset** and the **vulnerable ⇄ secure (L1/L2)** toggle are in the UI. Capstone at `/capstone?session=…`, attack board at `/board`. First `/api/ask` is instant — the embedding model is baked into the image.
+- Every module has an objective, **Check progress**, and **Reset attempt** in the UI. Security controls are labelled **Vulnerable ⇄ Hardened**. Learner progress is at `/progress?session=…`; the human-readable class board is `/attack-board` (`/board` remains the JSON API). First `/api/ask` is instant — the embedding model is baked into the image.
 - Ports already taken on your box? Add a `docker-compose.override.yml` remapping the host ports.
 
 > **Concept demos (optional, even simpler):** single-file, ~100-line versions of each attack — great for *reading the mechanism* before the full lab — live in the course repo under `blackhat-2026-adversarial-ai/M{3,5,6,7}/code/`, each with its own README (keyless Ollama).

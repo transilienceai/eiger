@@ -99,16 +99,26 @@ def test_root_serves_reach_test_page():
     client, _ = make_client({"HALCYON_MODE": "vulnerable"}, "hi")
     r = client.get("/")
     assert r.status_code == 200
-    assert "reach-test" in r.text.lower()
+    assert "your lab is ready" in r.text.lower()
+    assert "Start Module 1" in r.text
 
 
 def test_reach_page_is_dark_eiger():
     client, _ = make_client({"HALCYON_MODE": "vulnerable"}, "hi")
     text = client.get("/").text
-    assert "reach-test" in text.lower()      # still the reach screen
+    assert "readiness check" in text.lower()
     assert "Eiger" in text and "Halcyon" not in text
     assert "#0b1220" in text                  # dark alpine palette applied
-    assert 'href="/chat"' in text             # entry link preserved
+    assert 'href="/chat?session=eiger-' in text  # generated session carried into the lab
+
+
+def test_reach_page_preserves_explicit_session_and_chat_reuses_cookie():
+    client, _ = make_client({"HALCYON_MODE": "vulnerable"}, "hi")
+    reach = client.get("/", params={"session": "alice"})
+    assert 'href="/chat?session=alice"' in reach.text
+    assert reach.cookies.get("eiger_session") == "alice"
+    chat = client.get("/chat")
+    assert 'const sid = "alice";' in chat.text
 
 
 def test_chat_page_has_model_modal():
@@ -141,9 +151,21 @@ def test_chat_page_renders_all_layer_tabs_and_panels():
         'id="sidebar"', 'id="model-modal"',                   # chrome
     ):
         assert el in text, f"missing element {el}"
-    # attack-board link + MCP inspector hint
-    assert 'href="/board"' in text
+    # learner-facing progress links + MCP inspector hint
+    assert 'href="/attack-board"' in text
+    assert 'id="progress-link"' in text
+    assert "Vulnerable" in text and "Hardened" in text
     assert "modelcontextprotocol/inspector" in text
+
+
+def test_each_module_has_learner_workflow_progress_and_reset_controls():
+    client, _ = make_client({"HALCYON_MODE": "vulnerable"}, "hi")
+    text = client.get("/chat", params={"session": "p1"}).text
+    for module in ("m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"):
+        assert f'data-validate="{module}"' in text
+        assert f'data-reset="{module}"' in text
+        assert f'id="progress-{module}"' in text
+    assert "Learn" in text and "Attack" in text and "Harden &amp; retry" in text
 
 
 def test_chat_page_has_rag_panel():

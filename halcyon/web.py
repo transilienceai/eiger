@@ -127,6 +127,17 @@ _VALIDATORS = {
     "m8": m8.validate,
 }
 
+_MODULE_TITLES = {
+    "m1": "prompt injection",
+    "m2": "output handling",
+    "m3": "RAG poisoning",
+    "m4": "supply-chain audit",
+    "m5": "excessive agency",
+    "m6": "MCP tool poisoning",
+    "m7": "multi-agent trust",
+    "m8": "guardrail bypass",
+}
+
 
 def create_app(
     store: Store,
@@ -362,24 +373,44 @@ def create_app(
         )
         return {"reply": reply}
 
-    @app.get("/", response_class=HTMLResponse)
-    def root() -> str:
-        ollama = _ollama_up()
-        return templates.get_template("reach.html").render(
-            ollama=ollama, db=store.ping(), mode=settings.mode
+    def _resolve_session(request: Request, supplied: str | None) -> str:
+        """Give every browser journey a stable identity without making the learner invent one."""
+        return supplied or request.cookies.get("eiger_session") or f"eiger-{secrets.token_hex(4)}"
+
+    def _with_session_cookie(html: str, session_id: str) -> HTMLResponse:
+        response = HTMLResponse(html)
+        response.set_cookie(
+            "eiger_session", session_id, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 3
         )
+        return response
+
+    @app.get("/", response_class=HTMLResponse)
+    def root(request: Request, session: str | None = None) -> HTMLResponse:
+        session_id = _resolve_session(request, session)
+        ollama = _ollama_up()
+        html = templates.get_template("reach.html").render(
+            ollama=ollama,
+            db=store.ping(),
+            mcp=_mcp_status(),
+            mode=settings.mode,
+            session_id=session_id,
+        )
+        return _with_session_cookie(html, session_id)
 
     @app.get("/chat", response_class=HTMLResponse)
-    def chat_page(request: Request, session: str = "dev") -> str:
-        name = store.get_profile(session)
-        eff = effective_settings(settings, sess, session, "m2")
-        return templates.get_template("chat.html").render(
+    def chat_page(request: Request, session: str | None = None) -> HTMLResponse:
+        session_id = _resolve_session(request, session)
+        name = store.get_profile(session_id)
+        eff = effective_settings(settings, sess, session_id, "m2")
+        html = templates.get_template("chat.html").render(
             output_encoding="on" if eff.sec_output_encoding else "off",
             display_name_html=guards.encode_output(name, eff),
             nonce=request.state.csp_nonce,
             mode=settings.mode,
+            session_id=session_id,
             learn=learn_content.LEARN,
         )
+        return _with_session_cookie(html, session_id)
 
     from fastapi.responses import Response
 
@@ -446,6 +477,33 @@ def create_app(
     @app.get("/board")
     def board_view() -> dict:
         return capstone.board(store)
+
+    @app.get("/progress", response_class=HTMLResponse)
+    def progress_view(request: Request, session: str | None = None) -> HTMLResponse:
+        session_id = _resolve_session(request, session)
+        levels = sess.get_levels(session_id)
+        rows = []
+        for module, validator in _VALIDATORS.items():
+            result = validator(store, session_id)
+            level = levels.get(module, "L2" if settings.mode == "secure" else "L1")
+            rows.append({
+                "module": module.upper(),
+                "title": _MODULE_TITLES[module],
+                "core": result.get("core", "fail"),
+                "stretch": result.get("stretch", "fail"),
+                "mode": "Hardened" if level == "L2" else "Vulnerable",
+            })
+        risk = capstone.residual_risk(store, session_id)
+        html = templates.get_template("progress.html").render(
+            session_id=session_id,
+            rows=rows,
+            chain=next(m for m in risk["modules"] if m["module"] == "chain"),
+        )
+        return _with_session_cookie(html, session_id)
+
+    @app.get("/attack-board", response_class=HTMLResponse)
+    def attack_board_view() -> str:
+        return templates.get_template("board.html").render(board=capstone.board(store))
 
     @app.post("/api/level")
     def set_level(body: LevelIn) -> dict:

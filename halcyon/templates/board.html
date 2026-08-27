@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Eiger — class attack board</title>
+<style>
+  :root { --bg:#0b1220; --surface:#121b2d; --line:#26324a; --text:#e6ecf5;
+    --muted:#8ea3c0; --accent:#38bdf8; --ok:#34d399; }
+  * { box-sizing:border-box; } body { margin:0; padding:2rem 1rem; font-family:system-ui,sans-serif;
+    color:var(--text); background:var(--bg); } main { max-width:980px; margin:auto; }
+  h1 { margin-bottom:.2rem; } .muted { color:var(--muted); } a { color:var(--accent); }
+  table { width:100%; border-collapse:collapse; margin-top:1.25rem; background:var(--surface);
+    border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  th,td { padding:.7rem .8rem; text-align:left; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-size:.78rem; text-transform:uppercase; letter-spacing:.06em; }
+  .chips { display:flex; gap:.3rem; flex-wrap:wrap; } .chip { padding:.16rem .42rem; border-radius:5px;
+    background:#173f3a; color:var(--ok); font-size:.74rem; font-weight:700; }
+</style>
+</head>
+<body>
+<main>
+  <a href="/chat">← Lab</a>
+  <h1>Class attack board</h1>
+  <p class="muted">Sessions that have captured at least one core exploit, ordered by progress.</p>
+  <table>
+    <thead><tr><th>Session</th><th>Captured</th><th>Modules</th></tr></thead>
+    <tbody>
+      {% for row in board.sessions %}
+      <tr>
+        <td>{{ row.session }}</td><td>{{ row.exploited_count }} / {{ row.total }}</td>
+        <td><div class="chips">{% for module in row.modules if module.exploited %}<span class="chip">{{ module.module | upper }}</span>{% endfor %}</div></td>
+      </tr>
+      {% else %}<tr><td colspan="3" class="muted">No core exploits captured yet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</main>
+</body>
+</html>
