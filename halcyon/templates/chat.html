@@ -536,7 +536,11 @@
             body: JSON.stringify({ session_id: sid, module: m, level: next }),
           });
           levels[m] = next; paint();
-          await checkProgress(m);
+          showProgress(
+            m,
+            null,
+            levelLabel(m) + " active · Reset attempt before the defence retest",
+          );
         } catch (err) {
           showProgress(m, null, "Mode change failed — " + humanError(err));
         } finally { btn.disabled = false; }
