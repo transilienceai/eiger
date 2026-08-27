@@ -239,7 +239,15 @@ def create_app(
         nonce = secrets.token_urlsafe(16)
         request.state.csp_nonce = nonce
         resp = await call_next(request)
-        if settings.sec_output_encoding:
+        session_id = (
+            request.query_params.get("session")
+            or request.cookies.get("eiger_session")
+        )
+        m2_settings = (
+            effective_settings(settings, sess, session_id, "m2")
+            if session_id else settings
+        )
+        if m2_settings.sec_output_encoding:
             resp.headers["Content-Security-Policy"] = (
                 f"default-src 'self'; script-src 'self' 'nonce-{nonce}'; img-src 'self' data:"
             )

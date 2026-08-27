@@ -156,6 +156,9 @@ def test_chat_page_renders_all_layer_tabs_and_panels():
     assert 'id="progress-link"' in text
     assert "Vulnerable" in text and "Hardened" in text
     assert "modelcontextprotocol/inspector" in text
+    assert 'class="learn-takeaway"' in text
+    assert '<details class="snippet vulnerable">' in text
+    assert '<details class="snippet guard">' in text
 
 
 def test_each_module_has_learner_workflow_progress_and_reset_controls():
@@ -241,6 +244,15 @@ def test_secure_csp_nonce_matches_app_script():
     m = re.search(r"'nonce-([^']+)'", r.headers["content-security-policy"])
     assert m, "CSP should carry a script nonce in secure mode"
     assert f'nonce="{m.group(1)}"' in r.text, "app <script> must carry the CSP nonce"
+
+
+def test_per_session_m2_level_controls_csp():
+    client, _ = make_client({"HALCYON_MODE": "vulnerable"}, "hi")
+    client.post("/api/level", json={"session_id": "p1", "module": "m2", "level": "L2"})
+    hardened = client.get("/chat", params={"session": "p1"})
+    assert "content-security-policy" in {k.lower() for k in hardened.headers}
+    vulnerable = client.get("/chat", params={"session": "p2"})
+    assert "content-security-policy" not in {k.lower() for k in vulnerable.headers}
 
 
 def test_display_name_rendered_raw_when_vulnerable_escaped_when_secure():

@@ -23,11 +23,14 @@ def test_every_snippet_is_real_source():
 def test_layers_are_well_formed():
     for layer, entry in LEARN.items():
         assert entry["primer"].strip(), f"{layer}: empty primer"
+        assert entry["takeaway"].strip(), f"{layer}: empty takeaway"
+        assert len(entry["primer"]) <= 1100, f"{layer}: primer is too dense"
         kinds = {s["kind"] for s in entry["snippets"]}
         assert "vulnerable" in kinds and "guard" in kinds, f"{layer}: needs both kinds"
         for s in entry["snippets"]:
             assert (_ROOT / s["source"]).exists(), f"{layer}: missing source {s['source']}"
             assert s["notes"], f"{layer}/{s['title']}: no annotations"
+            assert len(s["notes"]) <= 4, f"{layer}/{s['title']}: annotations are too dense"
 
 
 def test_no_exploit_payloads_in_content():

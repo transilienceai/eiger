@@ -225,7 +225,7 @@ Then perform one browser craft loop in the **Capstone** tab: discover the abando
 | M8 | guardrail bypass | ☐ | ☐ | secure flips stretch→pass |
 | Capstone | Treasury Heist | ☐ | n/a | transfer must land on assigned account |
 
-Also confirm once from the repository checkout: `uv run pytest -q` → **340 passed, 5 skipped, 18 deselected**. (The runtime image intentionally does not contain the test suite.) The legacy `GET /capstone?session=<id>` residual-risk JSON may be smoke-tested for API compatibility, but it is not the Treasury Heist challenge.
+Also confirm once from the repository checkout: `uv run pytest -q` → **341 passed, 5 skipped, 18 deselected**. (The runtime image intentionally does not contain the test suite.) The legacy `GET /capstone?session=<id>` residual-risk JSON may be smoke-tested for API compatibility, but it is not the Treasury Heist challenge.
 
 ## Teardown
 

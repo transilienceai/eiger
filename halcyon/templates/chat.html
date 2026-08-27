@@ -8,13 +8,14 @@
 <details class="learn">
   <summary>📖 How this works — {{ entry.title }}</summary>
   <div class="learn-body">
+    <p class="learn-takeaway"><strong>Key idea:</strong> {{ entry.takeaway }}</p>
     {% for para in entry.primer.split('\n\n') %}<p>{{ para }}</p>{% endfor %}
     {% for s in entry.snippets %}
-    <div class="snippet {{ s.kind }}">
-      <div class="snip-head"><span class="tag">{{ s.kind }}</span>{{ s.title }} · <code>{{ s.source }}</code></div>
+    <details class="snippet {{ s.kind }}">
+      <summary class="snip-head"><span class="tag">{{ s.kind }}</span>{{ s.title }} · <code>{{ s.source }}</code></summary>
       <pre><code>{{ s.code }}</code></pre>
       <ul class="notes">{% for n in s.notes %}<li>{{ n }}</li>{% endfor %}</ul>
-    </div>
+    </details>
     {% endfor %}
   </div>
 </details>
@@ -171,8 +172,12 @@
   details.learn > summary { cursor: pointer; padding: .7rem .9rem; font-weight: 600; color: var(--accent-2); }
   details.learn .learn-body { padding: .2rem 1rem 1rem; }
   details.learn .learn-body p { color: var(--text); font-size: .9rem; line-height: 1.5; }
+  details.learn .learn-body .learn-takeaway { padding: .65rem .75rem; border-left: 3px solid var(--accent);
+    border-radius: 6px; background: var(--surface-2); color: var(--text); }
+  .learn-takeaway strong { color: var(--accent-2); }
   .snippet { margin: .9rem 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .snippet .snip-head { font-size: .8rem; padding: .4rem .6rem; background: var(--surface-2); color: var(--muted); }
+  .snippet .snip-head { cursor: pointer; font-size: .8rem; padding: .55rem .65rem; background: var(--surface-2); color: var(--muted); }
+  .snippet[open] .snip-head { border-bottom: 1px solid var(--line); }
   .snippet .snip-head .tag { font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-right: .4rem; }
   .snippet.vulnerable .snip-head .tag { color: #fb7185; }
   .snippet.guard .snip-head .tag { color: var(--accent); }

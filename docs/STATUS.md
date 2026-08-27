@@ -14,7 +14,7 @@ Companion docs: `README.md` (what Eiger is), `OPERATIONS.md` (deploy/run), `CLAU
 - **Repo:** `eiger`. Local: `/Users/kkmookhey/Projects/eiger`. Public remotes: `origin` = github.com/kkmookhey/eiger, `transilience` = github.com/transilienceai/eiger. Branch: `main`.
 - **Built so far:** **all 8 teaching modules, M1–M8**, plus the S11 treasury-heist capstone. The complete L0→L5 attack surface (chatbot → RAG → agent → MCP → multi-agent → guardrails) has live end-to-end proofs. **The teaching curriculum is code-complete.**
 - **Learner UX:** the 2026-08-27 refresh adds stable browser sessions, plain-language **Vulnerable/Hardened** controls, module objectives, in-panel validation/reset, bounded model requests, and human-readable learner/class progress pages. JSON APIs remain compatible.
-- **Tests:** `340 passed, 5 skipped, 18 deselected`; Ruff + mypy clean. The skips/deselections are gated integration and calibration tests.
+- **Tests:** `341 passed, 5 skipped, 18 deselected`; Ruff + mypy clean. The skips/deselections are gated integration and calibration tests.
 - **UX review:** the learner refresh completed a hands-on browser pass on 2026-08-27. Next: collect user feedback, then finish the remaining Ops/fleet and course-material work.
 
 ---
@@ -93,7 +93,7 @@ only as a fallback script. Not wired to `/validate` — it has its own audit log
 
 ```bash
 cd /Users/kkmookhey/Projects/eiger
-uv run pytest -q                      # 340 passed, 5 skipped, 18 deselected
+uv run pytest -q                      # 341 passed, 5 skipped, 18 deselected
 uv run ruff check . && uv run mypy halcyon
 # Local full stack (now 5 services: web, db, ollama, mcp-core-banking, mcp-crm):
 docker compose up -d --build
