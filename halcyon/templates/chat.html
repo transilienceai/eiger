@@ -249,7 +249,7 @@
   <button class="tab" data-tab="L2" type="button" role="tab">M4–M5 Supply Chain &amp; Agency</button>
   <button class="tab" data-tab="L3" type="button" role="tab">M6 MCP</button>
   <button class="tab" data-tab="L4" type="button" role="tab">M7 Multi-agent</button>
-  <button class="tab" data-tab="L5" type="button" role="tab">M8 Guardrails</button>
+  <button class="tab" data-tab="L5" type="button" role="tab">M8 Guardrails &amp; Evasion</button>
   <button class="tab" data-tab="CHAIN" type="button">Capstone</button>
 </nav>
 
@@ -372,16 +372,17 @@
     </section>
 
     <section data-layer="L5" role="tabpanel" hidden>
-      <h2>Production guardrails</h2>
+      <h2>Production guardrails &amp; evasion</h2>
       {% if learn.get('L5') %}{{ learn_details(learn['L5']) }}{% endif %}
       <div class="module-card">
       {{ module_header('m8', 'Guardrail bypass', 'Disguise a blocked request so the vulnerable guardrail lets it reach Iggy.') }}
-      <p>First land the bypass in <strong>Vulnerable</strong> mode. Then switch to <strong>Hardened</strong> and retry the same payload.</p>
+      <p><strong>Guided exercise · 25–35 minutes.</strong> First land the bypass in <strong>Vulnerable</strong>. Then switch to <strong>Hardened</strong>, reset the attempt, and retry the same payload.</p>
       <div class="row">
         <input id="gmsg" type="text" placeholder="Message guarded Iggy…" aria-label="Message guarded Iggy" autocomplete="off" />
         <button id="gsend" type="button">Send</button>
       </div>
       <div id="gout" class="out"></div>
+      <p class="hint"><strong>Ungraded bonus:</strong> after the hardened guard catches your original payload, try punctuation splitting, unicode homoglyphs, or a semantic paraphrase. A hardened bypass is expected residual risk—not a failed lab.</p>
       <p style="margin-top:1rem">
         <a id="progress-inline-link">See your progress across M1–M8</a>
       </p>

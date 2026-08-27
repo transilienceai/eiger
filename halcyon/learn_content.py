@@ -467,20 +467,21 @@ LEARN: dict[str, dict] = {
         ],
     },
     "L5": {
-        "title": "L5 · Production — the guardrail",
+        "title": "L5 · Production — guardrails and evasion",
         "primer": (
             "Production LLM systems often sit a guardrail — a prompt-firewall — in front of "
             "the model: a blocklist of dangerous phrasings checked before the request ever "
             "reaches the model. The naive version matches only the raw string exactly as it "
             "arrived, so an attacker doesn't need a new idea, just a different spelling — "
-            "leetspeak substitutions, zero-width characters wedged into the words, unicode "
-            "look-alikes, extra spacing — and the same request sails through unrecognized "
+            "leetspeak substitutions, zero-width characters wedged into the words, compatibility "
+            "unicode forms, extra spacing — and the same request sails through unrecognized "
             "while meaning exactly the same thing to the model that reads it afterward.\n\n"
-            "A real guard canonicalizes the input first — normalizing unicode, stripping "
-            "zero-width noise, undoing leetspeak, collapsing whitespace — and matches the "
-            "blocklist against that canonical form instead of the raw one. Obfuscation stops "
-            "working because the guard is comparing meaning, not literal bytes, before "
-            "deciding whether to let the message through."
+            "The hardened teaching guard canonicalizes the input first — normalizing unicode, "
+            "stripping zero-width noise, undoing common leetspeak, and collapsing whitespace — "
+            "then matches the same blocklist against that canonical form. This closes the known "
+            "representation tricks; it does not understand intent. Punctuation splitting, true "
+            "homoglyphs, and semantic paraphrases can still expose residual risk, which is why "
+            "production safety needs layered controls, telemetry, and repeated adversarial testing."
         ),
         "snippets": [
             {
@@ -517,7 +518,7 @@ LEARN: dict[str, dict] = {
                 "notes": [
                     "This is the hardened branch, gated by `settings.sec_guardrails` — the `SEC_GUARDRAILS` flag from the registry.",
                     "It decides purely on `canon` (`guardrail_blocklist_hit(canonicalize(message))`) — the raw-only check computed earlier in the function isn't consulted on this path.",
-                    "A canonical hit now actually blocks: `allow=False, event=\"hardened_block\"` — obfuscation no longer earns a pass, because the check runs against the normalized text.",
+                    "A canonical hit now actually blocks: `allow=False, event=\"hardened_block\"` — the covered obfuscation no longer earns a pass, because the check runs against normalized text.",
                     "A clean canonical form allows the message through with `event=None` — no audit noise on the ordinary case.",
                     "The difference between `\"bypassed\"` and `\"hardened_block\"` is which form of the message decides the outcome, not a different pattern list — `_GUARDRAIL_PATTERNS` is identical in both branches.",
                 ],
@@ -535,7 +536,7 @@ LEARN: dict[str, dict] = {
                     "    return t.strip().lower()"
                 ),
                 "notes": [
-                    "`unicodedata.normalize(\"NFKC\", text)` folds unicode look-alikes down to their standard compatibility form.",
+                    "`unicodedata.normalize(\"NFKC\", text)` folds Unicode compatibility forms; it does not solve visually similar Cyrillic or Greek homoglyphs.",
                     "`t.translate(_ZERO_WIDTH)` strips zero-width and BOM characters that would otherwise silently break up a blocklisted phrase.",
                     "`t.translate(_LEET)` maps common leetspeak substitutions (digits and symbols like `4`, `3`, `0`, `1`, `@`) back to the plain letters they stand in for.",
                     "`re.sub(r\"\\s+\", \" \", t)` collapses runs of whitespace so inserted spacing can't fragment a blocklisted phrase.",

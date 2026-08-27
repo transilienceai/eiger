@@ -8,7 +8,7 @@
 
 ## ⚠️ WARNING
 
-**Only run the vulnerable-load demo below inside an isolated, disposable container — never on a shared machine, a participant's machine, or the host running the Halcyon platform itself.**
+**Only run the vulnerable-load demo below inside an isolated, disposable container — never on a shared machine, a participant's machine, or the host running the Eiger platform itself.**
 
 `labs/m4/artifacts/community_model.pkl` is a real working pickle-deserialization exploit (see `labs/m4/build_poisoned.py`): unpickling it invokes `os.system("echo halcyon-m4-rce")` via `__reduce__`. The payload in this repo is intentionally harmless (it only echoes a fixed string), but the loading **mechanism** is genuine arbitrary code execution — `pickle.load()` on attacker-controlled bytes runs attacker-chosen code with the privileges of the process that loads it. Never load an untrusted pickle outside of a throwaway sandbox, and never adapt this demo to run a payload you haven't fully read.
 

@@ -41,7 +41,7 @@ The vulnerabilities here are intentional and will not be "fixed." Security repor
 1. **Validate the mechanism, not the model's words** — pass/fail is a query against an append-only audit log.
 2. **One build + `SEC_*` flags** — `vulnerable` vs `secure` is a config flag; the diff is the lesson.
 3. **Local floor, BYOK ceiling** — Ollama (keyless, default) or the participant's own key, selectable at runtime. Both online.
-4. **Deterministic + resettable + self-service** — `/validate/{module}`, `/reset/{module}`, reach-test on screen 1.
+4. **Deterministic + resettable + self-service** — `/validate/{module}`, `/reset/{module}`, readiness on screen 1.
 
 **Deployment:** hosted, container-per-participant app instances, a shared Ollama backend, and an external progress store; the same images dual-deploy to cloud (primary) and a local-LAN server (fallback).
 
@@ -65,7 +65,7 @@ open http://localhost:8000/                           # readiness check → lear
 
 ## Status
 
-**M1–M8 all built and merged — the full L0→L5 attack surface (chatbot → RAG → agent → MCP → multi-agent → guardrails). Next: the Ops fleet slice, then the module decks.**
+**M1–M8 and the Treasury Heist capstone are built and merged. The learner-guided UI is live across the full L0→L5 attack surface (chatbot → RAG → agent → MCP → multi-agent → production guardrails). Next: user feedback, then the remaining Ops/fleet and course-material work.**
 
 👉 **[`docs/STATUS.md`](docs/STATUS.md) is the single source of truth for build status and how to resume.** It covers the architecture, the per-module summary, how to run/test/deploy, the M6 starting point, and deferred cleanups.
 
