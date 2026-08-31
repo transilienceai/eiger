@@ -26,13 +26,6 @@ Each module is **Build → Break → Secure**:
 
 ---
 
-## M0 — Warm-up: Gandalf
-Before touching Eiger, play a few levels of **Halcyon Gandalf** — your instructor will share the link. Eight levels; each one adds a single new defence, and your job is to get the secret word out anyway.
-
-Goal: get into the mindset of tricking a model into revealing a secret it was told to protect, and start noticing *which* defence blocked you — the panel tells you. Nothing to submit here.
-
----
-
 ## M1 — Chatbot: make Iggy spill a secret
 
 **The layer:** Iggy has an internal **operator token** hidden in its system instructions and is told never to reveal it.

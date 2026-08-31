@@ -61,7 +61,7 @@ def test_http_host_poisoning_path_over_real_transport(mcp_urls):
         llm = StubToolLLM([
             ToolCall("crm__get_customer", {"account": "acct-victim"}),
             ToolCall("core_banking__get_account_details", {"account": "acct-victim"}),
-            FinalAnswer("Vera Payne, email victim@halcyon.test"),
+            FinalAnswer("Vera Payne, email victim@eiger.test"),
         ])
         async with http_host(core_url, crm_url, vault, store, settings, "sess") as host:
             reply, calls = await agent.run_mcp(

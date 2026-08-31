@@ -11,7 +11,7 @@ from halcyon import crm_fixtures
 def _bank():
     b = Bank()
     b.seed([{"id": "acct-victim", "owner_session": "victim", "balance": 5000,
-             "email": "victim@halcyon.test"}])
+             "email": "victim@eiger.test"}])
     return b
 
 
@@ -23,7 +23,7 @@ def test_core_banking_lists_and_calls():
             tools = {t.name for t in (await s.list_tools()).tools}
             assert {"get_account_details", "transfer_funds"} <= tools
             r = await s.call_tool("get_account_details", {"account": "acct-victim"})
-            assert "victim@halcyon.test" in r.content[0].text
+            assert "victim@eiger.test" in r.content[0].text
     anyio.run(main)
 
 

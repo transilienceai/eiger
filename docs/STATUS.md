@@ -1,8 +1,10 @@
 # Eiger — Build Status & Resume Guide
 
-**Last updated:** 2026-08-27. **Read this first to resume.**
+**Last updated:** 2026-08-31.
 
-Companion docs: `README.md` (what Eiger is), `OPERATIONS.md` (deploy/run), `CLAUDE.md` in the parent `Blackhat` workspace (standing rules), `halcyon-lab-spec.md` (Blackhat workspace — the per-module source of truth), each slice's `docs/specs/*` + `docs/plans/*`.
+Companion docs: `README.md` (overview), `OPERATIONS.md` (safe deployment),
+`docs/labs/` (participant, trainer, and QA guides), and each slice's historical
+`docs/specs/*` + `docs/plans/*` record.
 
 > **Documentation convention:** `README.md`, `OPERATIONS.md`, this status guide, and the participant/trainer/test guides in `docs/labs/` describe the current product. Dated specs, plans, e2e checklists, and black-box findings are historical build/evidence records; they intentionally preserve the terminology and interfaces that existed when written.
 
@@ -10,8 +12,8 @@ Companion docs: `README.md` (what Eiger is), `OPERATIONS.md` (deploy/run), `CLAU
 
 ## TL;DR
 
-- **What:** a deliberately-vulnerable single-app teaching lab for a 2-day Black Hat course on adversarial AI. Fictional AI-neobank **Eiger**; assistant **Iggy**. Attacked across six layers (L0→L5) that grow module by module. Participants **Build / Break / Secure** each layer.
-- **Repo:** `eiger`. Local: `/Users/kkmookhey/Projects/eiger`. Public remotes: `origin` = github.com/kkmookhey/eiger, `transilience` = github.com/transilienceai/eiger. Branch: `main`.
+- **What:** a deliberately vulnerable single-app teaching lab for an instructor-led course on adversarial AI. Fictional AI-neobank **Eiger**; assistant **Iggy**. Attacked across six layers (L0→L5) that grow module by module. Participants **Build / Break / Secure** each layer.
+- **Repo:** `eiger`; default branch: `main`.
 - **Built so far:** **all 8 teaching modules, M1–M8**, plus the S11 treasury-heist capstone. The complete L0→L5 attack surface (chatbot → RAG → agent → MCP → multi-agent → guardrails) has live end-to-end proofs. **The teaching curriculum is code-complete.**
 - **Learner UX:** the 2026-08-27 refresh adds stable browser sessions, plain-language **Vulnerable/Hardened** controls, module objectives, in-panel validation/reset, bounded model requests, and human-readable learner/class progress pages. JSON APIs remain compatible.
 - **Tests:** `341 passed, 5 skipped, 18 deselected`; Ruff + mypy clean. The skips/deselections are gated integration and calibration tests.
@@ -19,18 +21,10 @@ Companion docs: `README.md` (what Eiger is), `OPERATIONS.md` (deploy/run), `CLAU
 
 ---
 
-## The build process (how every module is made)
+## Development practice
 
-Vertical slice per module (`Sn` builds `Mn`). Each slice runs this loop:
-
-1. **Spec** — `superpowers:brainstorming` → design doc in `docs/specs/YYYY-MM-DD-halcyon-sN-*.md` (committed).
-2. **Plan** — `superpowers:writing-plans` → TDD task plan in `docs/plans/*` (committed).
-3. **Build** — `superpowers:subagent-driven-development`: a fresh **implementer** subagent per task (TDD), then a **reviewer** subagent per task; controller ledger at `.superpowers/sdd/progress.md`. Trivial flag-mirror tasks are verified inline instead of a full reviewer.
-4. **Final review** — one **opus** whole-branch review before merge (catches things the per-task reviews and the JS-blind test suite miss — it has earned its keep every slice).
-5. **e2e** — a live end-to-end proof (real model / real ChromaDB / real tool-calling).
-6. **Merge** — ff-merge the slice branch to `main`, delete branch, push both remotes.
-
-**Model tiers used:** implementers = haiku for pure transcription, sonnet for logic/integration; reviewers = sonnet; final whole-branch review = opus. Briefs/reports/diffs are handed to subagents as files under `.superpowers/sdd/` (gitignored).
+Each module is developed as a vertical slice: committed design and implementation plans,
+test-driven code, whole-change review, a live end-to-end proof, and merge to `main`.
 
 ### Load-bearing doctrine (do not route around)
 - **Validate the mechanism, not the model's words.** Every pass/fail is a SQL/query over an **append-only audit log**, never a string match on model output.
@@ -59,7 +53,7 @@ Vertical slice per module (`Sn` builds `Mn`). Each slice runs this loop:
 | M7 (L4 multi-agent) | `dispute_pipeline.py` (`run_dispute`, real compiled LangGraph `StateGraph`: intake→risk→action→supervisor), `dispute_fixtures.py`, `validators/m7.py` | reuses `Bank`/`bank_fixtures`; deterministic `StubToolLLM` nodes in tests |
 | M8 (L5 production guardrails & evasion) | `guards.canonicalize` / `guards.guardrail_check` (in `guards.py`), `halo.guarded_turn` (in `halo.py`), `capstone.py`, `validators/m8.py` | guided guardrail exercise; `GET /capstone` remains a legacy read-only residual-risk API and is not the Treasury Heist |
 | Treasury Heist capstone | `source_browser.py`, `treasury_state.py`, `treasury_corpus.py`, `treasury_agent.py`, `validators/chain.py` | separate integrated challenge: leaked ingest key → retrieved poisoned policy → transfer to the assigned account |
-| UI | `templates/chat.html`, `templates/reach.html`, `templates/progress.html`, `templates/attack_board.html` | readiness, guided module panels, per-learner progress, and human-readable class board |
+| UI | `templates/chat.html`, `templates/reach.html`, `templates/progress.html`, `templates/board.html` | readiness, guided module panels, per-learner progress, and human-readable class board |
 
 **Endpoints:** `GET /health` · `GET /`, `/chat`, `/progress`, `/attack-board` (learner UI; `/board` is JSON) · `POST /api/chat` (M1/M2) · `POST /api/kb` + `POST /api/ask` (M3) · `POST /submit/m4` (M4) · `POST /api/agent` (M5) · `POST /api/mcp-agent` (M6) · `POST /api/dispute` (M7) · `POST /api/guarded-chat` (M8) · `GET /capstone` (legacy residual-risk JSON) · `/source/*`, `/ingest/*`, `/treasury/brief`, `POST /api/treasury/review` (Treasury Heist) · `GET /validate/{module}` · `POST /reset/{module}`.
 
@@ -82,17 +76,10 @@ Vertical slice per module (`Sn` builds `Mn`). Each slice runs this loop:
 | M7 | L4 multi-agent | cascading injection: dispute-text payload propagates across implicitly-trusted agents → action agent auto-approves a fraudulent refund to an unowned account | supervisor rubber-stamps the fraudulent action | INTER_AGENT_AUTH (sign+verify inter-agent msgs · quarantine untrusted dispute text · supervisor provenance check) | `inter_agent_injection_propagated` ∧ `unauthorized_approval` / `supervisor_provenance_bypassed` | live (real graph; vuln core:pass → secure core:fail) |
 | M8 | L5 guardrail | guardrail evasion: an obfuscated (leetspeak/unicode/zero-width) payload bypasses the naive input filter and re-lands the M1 operator-token leak | harden & re-test: same payload blocked once `SEC_GUARDRAILS` is on | GUARDRAILS (canonicalize input before blocklist match + complete decision logging) | `guardrail_bypassed` / `guardrail_hardened_block` | live (real llama; vuln core:pass → secure core:fail) |
 
-M0 = Gandalf (warm-up) — now a **local** lab in `labs/m0-gandalf/`, eight levels on the
-shared Ollama with one `SEC_*`-style guard added per level. Lakera retired the hosted
-Gandalf front-end, so M0 no longer depends on a third party; the old hosted path is kept
-only as a fallback script. Not wired to `/validate` — it has its own audit log.
-
----
-
 ## Run / test / deploy
 
 ```bash
-cd /Users/kkmookhey/Projects/eiger
+cd eiger
 uv run pytest -q                      # 341 passed, 5 skipped, 18 deselected
 uv run ruff check . && uv run mypy halcyon
 # Local full stack (now 5 services: web, db, ollama, mcp-core-banking, mcp-crm):
@@ -104,7 +91,7 @@ open http://localhost:8000/
 # MCP-over-HTTP integration:   RUN_MCP_HTTP_TESTS=1 uv run pytest tests/test_mcp_http.py   # real streamable-HTTP MCP e2e
 ```
 
-**AWS deploy** — recipe in `OPERATIONS.md` → "AWS single-instance host". **Currently torn down (no running instances, billing stopped).** Profile `sara-sales`, acct 331145994818, region `ap-south-1`. **HARD LESSON: use an AMD instance (`r6a`/`m6a`), NOT Intel Sapphire-Rapids "i" families — Ollama's llama-server segfaults on Intel AMX under virtualization.** Account has a 5-vCPU standard-family quota (→ 4-vCPU cap). The ChromaDB embedding model is baked into the image; M5 agent + M3 RAG both work keyless via Ollama.
+See `OPERATIONS.md` for safe local and isolated classroom deployment guidance. The ChromaDB embedding model is baked into the image; M5 agent + M3 RAG both work keyless via Ollama.
 
 ---
 
@@ -149,18 +136,16 @@ The separate `chain` challenge combines reconnaissance, secret exposure, key-gat
 
 ## Deferred cleanups (non-blocking; from the ledger)
 
-Tracked in `.superpowers/sdd/progress.md`. None block the course; revisit opportunistically or during the Ops slice.
+None block the course; revisit opportunistically or during the Ops slice.
 
-- **Ops-slice items:** `/health` + `/` Ollama/MCP probes are now **cached (5s TTL)**; db/ollama publish fixed host ports (will collide under the 22-instance fleet); add a restricted DB role before the M4/M6 RCE labs share Postgres; improve Dockerfile dependency-layer caching; invoke the existing environment directly at web startup; add a `.dockerignore`.
+- **Ops-slice items:** `/health` + `/` Ollama/MCP probes are now **cached (5s TTL)**; add a restricted DB role before the M4/M6 RCE labs share Postgres; improve Dockerfile dependency-layer caching; invoke the existing environment directly at web startup.
 - **M6-specific (fast-follow, tied to per-participant MCP isolation):** the CRM rug-pull "benign-at-approval" illusion is a **process-global** `state["lists"]` counter — on a *shared* HTTP `mcp-crm` it permanently mutates after the first-ever `list_tools`, and `/reset/m6` doesn't reset it (grading stays correct in both modes; only the demo narrative degrades on a shared container). Fixes when the Ops slice gives each participant their own MCP containers, or add a per-session/reset counter hook. Also: `mcp_poisoned_invocation` attribution is deliberately coarse (any served poison arms the next sensitive core call — mechanism-based, model-word-independent); `build_*_server` carry unused `bank`/`vault` params (signature symmetry); `quarantine_description` is sentence-granular (imperfect teaching guard, like M1/M3).
-- **Small code tidies:** `config.mode` not validated against `{vulnerable,secure}` (fail-open on typo — consider raising); `pg_store` duplicates the `"module_reset"` literal + redundant `conn.commit()`; `store.append_event` can forge a `module_reset` (add a guard now that reset endpoints exist); M1 input filter + M3 injection classifier are deliberately imperfect (teaching guards, but tunable); `build_llm` `provider="remote"` hardcodes OpenAI; scanner doesn't inspect old-style `INST`/`OBJ` opcodes; `Bank.debit` unused (no funding-source account); `agent.run`'s `module` param unused (m5 hardcoded in `tools.execute`).
+- **Small code tidies:** `pg_store` duplicates the `"module_reset"` literal + redundant `conn.commit()`; `store.append_event` can forge a `module_reset` (add a guard now that reset endpoints exist); M1 input filter + M3 injection classifier are deliberately imperfect (teaching guards, but tunable); `build_llm` `provider="remote"` hardcodes OpenAI; scanner doesn't inspect old-style `INST`/`OBJ` opcodes; `Bank.debit` unused (no funding-source account); `agent.run`'s `module` param unused (m5 hardcoded in `tools.execute`).
 - **Verification gaps:** BYOK (OpenAI/Anthropic) providers for both chat and tool-calling are wire-format-correct (claude-api-verified) but only smoke-tested with a real key at Day-2 time — do a live BYOK check when a key is available.
 - **M7-specific (minor):** `_execute_refund` records `unauthorized_approval` for a nonexistent target account (`acct-attacker`) then no-ops the credit, consistent with the same pattern in M5's `tools.py`; harmless — the mechanism-based grading is still correct.
 
 ---
 
-## Key facts for a fresh context
+## Fixed grading identifiers
 
-- Memory index: `blackhat-build-sequence.md` (in the auto-memory) has the running state and points here.
-- The **parent Blackhat workspace** (`/Users/kkmookhey/Projects/Blackhat`) holds the course-level `HANDOFF.md`, `halcyon-lab-spec.md`, `CLAUDE.md`, and the decks/`training/` repo. It is NOT a git repo; `eiger` is the app repo.
 - Honeytoken/markers (canaries): `HALCYON-OPS-7731` (M1), `HALO-ACT-OVERRIDE` (M1 stretch), `SYS-CANARY-M2-3390` (M2), `RAG-OWNED-7788` (M3), poisoned-artifact sha256 in `m4_answers.py` (M4). M6 has no fixed token — the attack payload is the `POISON_CLAUSE` in `mcp_servers/crm.py` (the CRM `get_customer` description); tools are host-qualified `"<server>__<tool>"` (e.g. `core_banking__get_account_details`).

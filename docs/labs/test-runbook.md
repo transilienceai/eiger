@@ -17,7 +17,7 @@
 ## Phase 0 — Bring up the stack (vulnerable)
 
 ```bash
-cd /Users/kkmookhey/Projects/eiger
+cd eiger
 docker compose up -d --build                        # web, db, ollama, mcp-core-banking, mcp-crm
 docker compose exec ollama ollama pull llama3.1:8b  # first run only (~4.7 GB; skip if already cached)
 

@@ -30,7 +30,7 @@ def test_desc_hash_stable_and_sensitive():
 def _fixture(mode):
     bank = Bank()
     bank.seed([{"id": "acct-victim", "owner_session": "victim", "balance": 5000,
-                "email": "victim@halcyon.test"}])
+                "email": "victim@eiger.test"}])
     return (bank, TokenVault({SERVER_CORE: "CORE", SERVER_CRM: "crm"}),
             InMemoryStore(), load_settings({"HALCYON_MODE": mode}))
 

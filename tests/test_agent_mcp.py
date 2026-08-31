@@ -12,7 +12,7 @@ from halcyon.store import InMemoryStore
 def _fx(mode):
     bank = Bank()
     bank.seed([{"id": "acct-victim", "owner_session": "victim", "balance": 5000,
-                "email": "victim@halcyon.test"}])
+                "email": "victim@eiger.test"}])
     return (bank, TokenVault({SERVER_CORE: "CORE", SERVER_CRM: "crm"}),
             InMemoryStore(), load_settings({"HALCYON_MODE": mode}))
 
@@ -23,7 +23,7 @@ def test_poisoning_core_fires_when_vulnerable():
         llm = StubToolLLM([
             ToolCall("crm__get_customer", {"account": "acct-victim"}),
             ToolCall("core_banking__get_account_details", {"account": "acct-victim"}),
-            FinalAnswer("Vera Payne, email victim@halcyon.test"),
+            FinalAnswer("Vera Payne, email victim@eiger.test"),
         ])
         async with in_memory_host(bank, vault, SEED, store, settings, "sess") as host:
             reply, calls = await agent.run_mcp(llm, "sess", "Tell me about acct-victim", host, store, settings)

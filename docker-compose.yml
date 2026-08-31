@@ -1,7 +1,9 @@
 services:
   web:
     build: .
-    ports: ["8000:8000"]
+    # Safe local default: reachable only from this host. For an isolated lab LAN,
+    # set EIGER_WEB_BIND to the host's private-LAN address explicitly.
+    ports: ["${EIGER_WEB_BIND:-127.0.0.1}:8000:8000"]
     environment:
       HALCYON_MODE: ${HALCYON_MODE:-vulnerable}
       DATABASE_URL: postgresql://halcyon:halcyon@db:5432/halcyon
@@ -24,17 +26,15 @@ services:
   mcp-core-banking:
     build: .
     command: uv run uvicorn halcyon.mcp_deploy:CORE_ASGI --host 0.0.0.0 --port 9001
-    # Published so participants can point MCP Inspector at the wire protocol
-    # (the M6 "see the poison in tools/list" demo). These servers ARE the
-    # deliberate in-product target — network-exposed, unauthenticated MCP is the
-    # M6 lesson. A local dev box can pin these to 127.0.0.1 via the override.
-    ports: ["9001:9001"]
+    # Host-local for MCP Inspector. Deliberate LAN exposure requires setting
+    # EIGER_MCP_BIND to a private-LAN address; never expose this to the internet.
+    ports: ["${EIGER_MCP_BIND:-127.0.0.1}:9001:9001"]
     environment:
       HALCYON_MODE: ${HALCYON_MODE:-vulnerable}
   mcp-crm:
     build: .
     command: uv run uvicorn halcyon.mcp_deploy:CRM_ASGI --host 0.0.0.0 --port 9002
-    ports: ["9002:9002"]
+    ports: ["${EIGER_MCP_BIND:-127.0.0.1}:9002:9002"]
     environment:
       HALCYON_MODE: ${HALCYON_MODE:-vulnerable}
   db:
@@ -44,7 +44,6 @@ services:
       POSTGRES_PASSWORD: halcyon
       POSTGRES_DB: halcyon
     volumes: ["pgdata:/var/lib/postgresql/data"]
-    ports: ["5432:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U halcyon -d halcyon"]
       interval: 2s
@@ -53,7 +52,6 @@ services:
   ollama:
     image: ollama/ollama:latest
     volumes: ["ollama:/root/.ollama"]
-    ports: ["11434:11434"]
 volumes:
   pgdata:
   ollama:

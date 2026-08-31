@@ -1,6 +1,6 @@
 # Eiger — Trainer Guide (with solutions)
 
-**Confidential — contains answers.** This is the facilitator's companion to the participant guide. For each module it gives the mechanism, the working exploit(s), the expected `/validate` result, how to demo the vulnerable→secure flip, the model tier, and teaching notes. The participant guide (`participant-guide.md`) is the same structure with the solutions removed.
+**Contains answers.** This is the facilitator's companion to the participant guide. For each module it gives the mechanism, the working exploit(s), the expected `/validate` result, how to demo the vulnerable→secure flip, the model tier, and teaching notes. The participant guide (`participant-guide.md`) is the same structure with the solutions removed.
 
 For an executable end-to-end QA pass, use `test-runbook.md`. This guide is for *running the room*.
 
@@ -19,15 +19,6 @@ Three things to drill into participants early:
 **Readiness screen:** `http://localhost:8000/` checks the app, model, progress store, and MCP tools. It also establishes and preserves the learner's session before they enter the lab.
 
 **Learner UI:** `/chat` is a **tabbed app with a panel for every layer (L0–L5)** plus the separate Treasury Heist capstone. The left sidebar uses plain-language **Vulnerable/Hardened** per-module controls with no restart; each module carries its objective, **Check progress**, and **Reset attempt**. The header links to `/progress`; `/attack-board` is the human-readable class board. A model-config modal supports BYOK. You can still drive every module via `curl`/the API. (M2's XSS uses the display-name field.)
-
----
-
-## M0 — Gandalf (warm-up)
-Local lab, runs on the shared Ollama: `python3 labs/m0-gandalf/halcyon_gandalf.py` → `http://localhost:8788`. Run `--selftest` before the session. Eight levels, one new guard per level, same one-flag-one-guard shape as the `SEC_*` registry — so the warm-up previews the architecture instead of just being a game. Full ladder and instructor notes in `labs/m0-gandalf/README.md`.
-
-Use it to get everyone thinking in "trick the model into revealing a secret" mode before M1, and put the guard-chip panel on the projector — a block names the guard that fired and the stage it fired at. No `/validate` here; the lab keeps its own audit log.
-
-Lakera retired the hosted Gandalf UI, so do **not** schedule around the third-party version. `labs/m0-gandalf/gandalf_lakera_proxy.py` still reaches their legacy API if you want it, but it needs internet and can vanish without notice.
 
 ---
 

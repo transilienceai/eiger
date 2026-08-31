@@ -1,12 +1,16 @@
 # Eiger
 
-Codebase for **Eiger** — a deliberately-vulnerable, single-app teaching lab for a 2-day Black Hat course on adversarial AI. One fictional AI-first neobank ("Eiger") whose assistant ("Iggy") is attacked across six layers that grow module by module:
+[![CI](https://github.com/kkmookhey/eiger/actions/workflows/ci.yml/badge.svg)](https://github.com/kkmookhey/eiger/actions/workflows/ci.yml)
+
+**Eiger** is a deliberately vulnerable, single-app teaching lab for an instructor-led course on adversarial AI. One fictional AI-first neobank ("Eiger") and its assistant ("Iggy") are attacked across six layers that grow module by module:
 
 ```
 L0 chatbot → L1 RAG → L2 agent → L3 MCP servers → L4 multi-agent → L5 production
 ```
 
 Participants **Build / Break / Secure** each layer. Named for the Eiger's north face — the hard, exposed climb.
+
+![Eiger learner interface](docs/assets/eiger-readiness.jpg)
 
 ---
 
@@ -34,7 +38,7 @@ The vulnerabilities here are intentional and will not be "fixed." Security repor
 
 ---
 
-> **Naming:** the lab, the in-fiction neobank, and the courseware narrative are all **Eiger**; the assistant is **Iggy**. The Python package is still named `halcyon` (historical — kept to avoid a churny rename). Some in-app strings and the `HALO-ACT-` grading marker still carry the old "Halcyon"/"Halo" names; those are tracked separately from this doc.
+> **Naming:** the lab, the in-fiction neobank, and all learner-facing product copy are **Eiger**; the assistant is **Iggy**. The Python package, environment variables, and fixed grading canaries retain their historical `halcyon`/`HALO` identifiers to avoid a compatibility-breaking rename.
 
 ## Doctrine (load-bearing)
 
@@ -56,20 +60,20 @@ docker compose exec ollama ollama pull llama3.1:8b    # first run only (~4.9 GB)
 open http://localhost:8000/                           # readiness check → learner-guided lab UI
 ```
 
+All published Compose ports bind to `127.0.0.1` by default; Postgres and Ollama are available only inside the Compose network. See [`OPERATIONS.md`](OPERATIONS.md) before making any service reachable from another machine.
+
 - **Day-1 modules** (L0 chatbot, L1 RAG) run **keyless** on the local Ollama.
 - **Day-2 modules** (L2 agent, L3 MCP, L4 multi-agent) are **BYOK** — paste an OpenAI/Anthropic key in the UI (frontier models chain tool calls reliably; the keyless model shows the plumbing).
 - Every module has an objective, **Check progress**, and **Reset attempt** in the UI. Security controls are labelled **Vulnerable ⇄ Hardened**. Learner progress is at `/progress?session=…`; the human-readable class board is `/attack-board` (`/board` remains the JSON API). First `/api/ask` is instant — the embedding model is baked into the image.
-- Ports already taken on your box? Add a `docker-compose.override.yml` remapping the host ports.
-
-> **Concept demos (optional, even simpler):** single-file, ~100-line versions of each attack — great for *reading the mechanism* before the full lab — live in the course repo under `blackhat-2026-adversarial-ai/M{3,5,6,7}/code/`, each with its own README (keyless Ollama).
+- Ports already taken on your box? Add a `docker-compose.override.yml` remapping the host ports while retaining `127.0.0.1` bindings.
 
 ## Status
 
 **M1–M8 and the Treasury Heist capstone are built and merged. The learner-guided UI is live across the full L0→L5 attack surface (chatbot → RAG → agent → MCP → multi-agent → production guardrails). Next: user feedback, then the remaining Ops/fleet and course-material work.**
 
-👉 **[`docs/STATUS.md`](docs/STATUS.md) is the single source of truth for build status and how to resume.** It covers the architecture, the per-module summary, how to run/test/deploy, the M6 starting point, and deferred cleanups.
+👉 **[`docs/STATUS.md`](docs/STATUS.md) is the detailed build and architecture status.** Participant and trainer material lives under [`docs/labs/`](docs/labs/).
 
-Planning workspace / full course context lives in the `Blackhat` workspace (`halcyon-lab-spec.md`, `HANDOFF.md`, `CLAUDE.md`).
+Contributions are welcome; read [`CONTRIBUTING.md`](CONTRIBUTING.md) first. For unintended security problems, follow [`SECURITY.md`](SECURITY.md).
 
 ## License
 
